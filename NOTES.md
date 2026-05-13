@@ -8,6 +8,8 @@
 - [Tech stack detection via LLM](#why-tech-stack-detection-uses-gemini-instead-of-a-hardcoded-map)
 - [Test files included](#why-test-files-are-included-in-ingestion)
 - [500KB file size limit](#why-file-size-limit-is-500kb-not-50kb)
+- [API key strategy for Phase 9](#api-key-strategy-hybrid-pre-warm--user-supplied)
+- [Frontend UX decisions for Phase 9](#frontend-ux-decisions-phase-9)
 - [API key security](#api-key-security)
 - [IP-based rate limiting](#why-ip-based-rate-limiting-instead-of-login-for-mvp)
 - [Deployment strategy](#deployment-strategy)
@@ -114,3 +116,59 @@ We only chunk top-level declarations (functions, classes, types at the module ro
 nested helper would create thousands of tiny low-value chunks and flood the vector store with noise.
 A 300-line component is split into parts (`MyComponent_part0`, etc.) at blank lines or closing braces.
 Fallback to line-based splitting if Babel can't parse the file.
+
+---
+
+## API key strategy: hybrid pre-warm + user-supplied
+
+The free-tier limits (100 RPM, 1000 req/day) make a shared server-side key unworkable as soon
+as 2–3 users submit repos concurrently. The solution is a two-tier approach:
+
+**Tier 1 — Pre-warmed example repos (no key needed):**
+- At server startup, ingest the 6 curated example repos if not already in the store
+- These are available instantly to all visitors, zero quota used per request
+- Covers the demo/exploration use case completely
+- Examples: immer, redux, zustand, swr, axios, zod
+
+**Tier 2 — User-supplied key for custom repos:**
+- User pastes their own free Gemini AI Studio key to index any other repo
+- Key is sent once to `POST /session`, stored encrypted in memory, never re-transmitted
+- Their quota, their limits — we're not responsible for their usage
+- Framing: "Get a free key at aistudio.google.com — takes 30 seconds, no card needed"
+
+**Why this works:**
+- Demo experience is instant and zero-friction (tier 1)
+- Power users who want their own repos can self-serve (tier 2)
+- We never run out of quota on the server key
+
+---
+
+## Frontend UX decisions (Phase 9)
+
+**Landing page:**
+- Hero: short tagline + GitHub URL input box
+- Below input: 6 clickable example repo cards (name, one-line description, est. time)
+- Clicking a card fills the URL input — user still hits "Explore" so they feel in control
+- No API key field on landing — only shown when they try a non-example repo
+
+**Ingestion flow:**
+- Show a live progress stepper: `Fetching files → Chunking → Embedding (12/150) → Ready`
+- Before ingestion starts, use the file count from the GitHub tree response to show
+  "~2 min" estimate upfront — no surprises
+- Progress streamed via SSE (requires a new `POST /api/repos/:id/progress` SSE endpoint,
+  or fold it into the existing ingest route)
+
+**Repo overview page (after ingestion):**
+- Tech stack badges (Express, TypeScript, etc.)
+- Folder tree explorer (collapsible)
+- Architecture summary paragraph (LLM-generated, runs once on ingest)
+- Tab bar: Overview / Chat / Change Guide
+
+**Chat tab:**
+- Simple message thread — user types, streamed answer appears word by word
+- Show which files were used as context (source citations under each answer)
+- Suggested starter questions based on the repo (LLM-generated on ingest)
+
+**Change Guide tab:**
+- Text area: "Describe the change you want to make"
+- Output: a card per file — file path, why it needs changing, what to do
