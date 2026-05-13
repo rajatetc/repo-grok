@@ -1,6 +1,24 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import type { SearchResult } from "./vectorStore.js";
 import type { RepoMetadata } from "../types/index.js";
+
+const CHANGE_GUIDE_SCHEMA = {
+  type: SchemaType.OBJECT,
+  properties: {
+    summary: { type: SchemaType.STRING },
+    filesToModify: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          filePath:   { type: SchemaType.STRING },
+          reason:     { type: SchemaType.STRING },
+          suggestion: { type: SchemaType.STRING },
+        },
+      },
+    },
+  },
+};
 
 const LLM_MODEL = "gemini-2.0-flash";
 
@@ -43,11 +61,15 @@ Answer clearly and concisely. Reference specific file paths and function names w
 If the retrieved snippets don't contain enough information to fully answer, say so honestly.
 Do not make up code that isn't in the snippets above.`;
 
-  const response = await model.generateContentStream(prompt);
-
-  for await (const chunk of response.stream) {
-    const text = chunk.text();
-    if (text) yield text;
+  try {
+    const response = await model.generateContentStream(prompt);
+    for await (const chunk of response.stream) {
+      const text = chunk.text();
+      if (text) yield text;
+    }
+  } catch (err) {
+    console.error("Stream error:", err);
+    yield "\n\n[Error: response was interrupted. Please try again.]";
   }
 }
 
@@ -86,6 +108,7 @@ Only include files that genuinely need to change. Do not invent files not presen
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
       responseMimeType: "application/json",
+      responseSchema: CHANGE_GUIDE_SCHEMA,
     },
   });
 

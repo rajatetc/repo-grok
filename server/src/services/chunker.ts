@@ -28,8 +28,8 @@ function detectType(name: string | undefined, nodeType: string): ChunkType {
 // Only process top-level declarations. We don't want to chunk every nested helper
 // inside a function — that would create thousands of tiny, low-value chunks.
 function isTopLevel(path: NodePath): boolean {
-  const t = path.parent.type;
-  return t === "Program" || t === "ExportNamedDeclaration" || t === "ExportDefaultDeclaration";
+  const parentType = path.parent.type;
+  return parentType === "Program" || parentType === "ExportNamedDeclaration" || parentType === "ExportDefaultDeclaration";
 }
 
 // --- Large chunk splitting ---

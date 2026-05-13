@@ -30,14 +30,25 @@ function chunkToText(chunk: CodeChunk): string {
   return parts.filter(Boolean).join("\n");
 }
 
-async function embedBatch(texts: string[]): Promise<number[][]> {
-  const model = getModel();
-  const result = await model.batchEmbedContents({
-    requests: texts.map((text) => ({
-      content: { parts: [{ text }], role: "user" },
-    })),
-  });
-  return result.embeddings.map((e) => e.values);
+async function embedBatch(texts: string[], attempt = 0): Promise<number[][]> {
+  try {
+    const model = getModel();
+    const result = await model.batchEmbedContents({
+      requests: texts.map((text) => ({
+        content: { parts: [{ text }], role: "user" },
+      })),
+    });
+    return result.embeddings.map((e) => e.values);
+  } catch (err) {
+    const isRateLimit = (err as { status?: number }).status === 429;
+    if (isRateLimit && attempt < 3) {
+      const delay = (attempt + 1) * 5000; // 5s, 10s, 15s
+      console.warn(`Rate limited by Gemini, retrying in ${delay / 1000}s...`);
+      await sleep(delay);
+      return embedBatch(texts, attempt + 1);
+    }
+    throw err;
+  }
 }
 
 // Embeds all chunks in batches of 100, with a 1s pause between batches.

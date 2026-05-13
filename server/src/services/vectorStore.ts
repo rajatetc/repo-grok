@@ -7,7 +7,7 @@ export interface SearchResult {
 
 export interface SearchOptions {
   topK?: number;        // how many results to return (default 8)
-  minScore?: number;    // minimum similarity threshold (default 0.6)
+  minScore?: number;    // minimum similarity threshold (default 0.3)
   filterType?: ChunkType[]; // optionally restrict to specific chunk types
 }
 
@@ -20,6 +20,7 @@ const store = new Map<string, CodeChunk[]>();
 // Result: 1 = identical direction (very relevant), 0 = orthogonal (unrelated), -1 = opposite
 // We use dot product / (magnitude A * magnitude B)
 function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) throw new Error(`Vector length mismatch: ${a.length} vs ${b.length}`);
   let dot = 0;
   let magA = 0;
   let magB = 0;
@@ -48,7 +49,7 @@ export function search(
   queryEmbedding: number[],
   options: SearchOptions = {}
 ): SearchResult[] {
-  const { topK = 8, minScore = 0.6, filterType } = options;
+  const { topK = 8, minScore = 0.3, filterType } = options;
 
   const chunks = store.get(repoId);
   if (!chunks || chunks.length === 0) return [];

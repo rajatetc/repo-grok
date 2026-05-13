@@ -28,18 +28,24 @@ export function parseGitHubUrl(url: string): {
   repo: string;
   branch?: string;
 } {
-  const cleaned = url.trim().replace(/\/$/, "");
-  const match = cleaned.match(
-    /github\.com\/([^/]+)\/([^/]+)(?:\/tree\/([^/]+))?/
-  );
+  // Strip trailing slash and .git suffix before parsing
+  const cleaned = url.trim().replace(/\/$/, "").replace(/\.git$/, "");
+  // Branch capture uses .+ (not [^/]+) so feature/my-branch works
+  const match = cleaned.match(/github\.com\/([^/]+)\/([^/]+?)(?:\/tree\/(.+))?$/);
   if (!match) throw new Error(`Invalid GitHub URL: ${url}`);
   return { owner: match[1], repo: match[2], branch: match[3] };
 }
 
+function getExtension(filePath: string): string {
+  const filename = filePath.split("/").pop() ?? "";
+  const dot = filename.lastIndexOf(".");
+  // dot > 0 excludes dotfiles like .eslintrc (dot at index 0 = no real extension)
+  return dot > 0 ? filename.slice(dot) : "";
+}
+
 function isAllowedFile(path: string): boolean {
   if (IGNORED_PATHS.some((p) => path.includes(p))) return false;
-  const ext = path.slice(path.lastIndexOf("."));
-  return ALLOWED_EXTENSIONS.has(ext);
+  return ALLOWED_EXTENSIONS.has(getExtension(path));
 }
 
 async function getDefaultBranch(
@@ -88,13 +94,18 @@ async function fetchFileContent(
   octokit: Octokit,
   owner: string,
   repo: string,
-  path: string
+  path: string,
+  branch: string
 ): Promise<string | null> {
   try {
-    const { data } = await octokit.repos.getContent({ owner, repo, path });
+    // ref: branch ensures we fetch from the correct branch, not always default
+    const { data } = await octokit.repos.getContent({ owner, repo, path, ref: branch });
     if (Array.isArray(data) || data.type !== "file") return null;
+    if (!data.content) return null;
     return Buffer.from(data.content, "base64").toString("utf-8");
-  } catch {
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status !== 404) console.warn(`Failed to fetch ${path} (${status})`);
     return null;
   }
 }
@@ -103,6 +114,7 @@ async function fetchFilesInBatches(
   octokit: Octokit,
   owner: string,
   repo: string,
+  branch: string,
   files: Array<{ path: string; size: number }>
 ): Promise<RepoFile[]> {
   const results: RepoFile[] = [];
@@ -111,7 +123,7 @@ async function fetchFilesInBatches(
     const batch = files.slice(i, i + BATCH_SIZE);
     const fetched = await Promise.all(
       batch.map(async ({ path, size }) => {
-        const content = await fetchFileContent(octokit, owner, repo, path);
+        const content = await fetchFileContent(octokit, owner, repo, path, branch);
         return content != null ? { path, content, size } : null;
       })
     );
@@ -168,7 +180,7 @@ export async function fetchRepo(url: string): Promise<{
   const fileMeta = await fetchFilePaths(octokit, owner, repo, branch);
   console.log(`Found ${fileMeta.length} eligible files`);
 
-  const files = await fetchFilesInBatches(octokit, owner, repo, fileMeta);
+  const files = await fetchFilesInBatches(octokit, owner, repo, branch, fileMeta);
   console.log(`Fetched content for ${files.length} files`);
 
   const folderTree = buildFolderTree(files);

@@ -71,7 +71,7 @@ export interface QueryResult {
 }
 
 export interface ChangeGuideResult {
-  description: string;
+  summary: string;
   filesToModify: Array<{
     filePath: string;
     reason: string;

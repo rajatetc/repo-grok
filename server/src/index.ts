@@ -3,6 +3,14 @@ import express from "express";
 import cors from "cors";
 import type { Request, Response, NextFunction } from "express";
 
+if (!process.env.GEMINI_API_KEY) {
+  console.error("ERROR: GEMINI_API_KEY is not set. Copy .env.example to .env and add your key.");
+  process.exit(1);
+}
+if (!process.env.GITHUB_TOKEN) {
+  console.warn("WARN: GITHUB_TOKEN is not set. GitHub API limited to 60 req/hr.");
+}
+
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
