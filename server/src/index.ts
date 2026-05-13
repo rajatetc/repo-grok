@@ -5,6 +5,15 @@ import rateLimit from "express-rate-limit";
 import { randomUUID } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 
+const isDev = process.env.NODE_ENV !== "production";
+
+// In dev: return real error message so you can debug without reading server logs.
+// In prod: return generic message so internals aren't leaked to end users.
+function clientError(err: unknown, fallback: string): string {
+  if (isDev && err instanceof Error) return err.message;
+  return fallback;
+}
+
 import { fetchRepo } from "./services/github.js";
 import { chunkFiles } from "./services/chunker.js";
 import { detectTechStack } from "./utils/techDetector.js";
@@ -105,7 +114,7 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
     return res.status(201).json({ repoId, metadata });
   } catch (err) {
     console.error(`Ingestion failed for ${url}:`, err);
-    return res.status(500).json({ error: "Ingestion failed. Check the URL and try again." });
+    return res.status(500).json({ error: clientError(err, "Ingestion failed. Check the URL and try again.") });
   }
 });
 
@@ -201,14 +210,14 @@ app.post("/api/repos/:id/change-guide", async (req: Request, res: Response) => {
     return res.json(guide);
   } catch (err) {
     console.error("Change guide failed:", err);
-    return res.status(500).json({ error: "Failed to generate change guide." });
+    return res.status(500).json({ error: clientError(err, "Failed to generate change guide.") });
   }
 });
 
 // --- Error handler ---
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err.stack);
-  res.status(500).json({ error: "Internal server error" });
+  res.status(500).json({ error: clientError(err, "Internal server error") });
 });
 
 app.listen(PORT, () => {
