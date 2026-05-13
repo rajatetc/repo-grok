@@ -20,6 +20,8 @@ import { detectTechStack } from "./utils/techDetector.js";
 import { embedChunks, embedQuery } from "./services/embeddings.js";
 import { storeChunks, search, hasRepo } from "./services/vectorStore.js";
 import { streamAnswer, generateChangeGuide } from "./services/llm.js";
+import { loadSeeds } from "./services/seeds.js";
+import { normalizeUrl } from "./utils/normalizeUrl.js";
 import type { RepoMetadata } from "./types/index.js";
 
 if (!process.env.GEMINI_API_KEY) {
@@ -47,11 +49,8 @@ const repoMetadataStore = new Map<string, RepoMetadata>();
 
 // --- URL dedup cache ---
 // Normalized URL → repoId so re-submitting the same repo is instant.
+// Pre-populated with seeds on startup.
 const urlCache = new Map<string, string>();
-
-function normalizeUrl(url: string): string {
-  return url.trim().toLowerCase().replace(/\.git$/, "").replace(/\/$/, "");
-}
 
 // --- Rate limiters ---
 // General limiter: protects against accidental loops / abusive clients.
@@ -241,6 +240,13 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err.stack);
   res.status(500).json({ error: clientError(err, "Internal server error") });
 });
+
+// Load pre-baked example repos so they're available instantly on startup
+loadSeeds().then(({ urlMap, metadataMap }) => {
+  for (const [url, id] of urlMap) urlCache.set(url, id);
+  for (const [id, meta] of metadataMap) repoMetadataStore.set(id, meta);
+  if (urlMap.size > 0) console.log(`${urlMap.size} seed(s) ready`);
+}).catch((err) => console.warn("Seed loading failed:", err));
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
