@@ -24,8 +24,12 @@ if (!process.env.GITHUB_TOKEN) {
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
-app.use(cors({ origin: process.env.CLIENT_URL ?? "http://localhost:5173" }));
-app.use(express.json({ limit: "10mb" }));
+const clientOrigin = process.env.CLIENT_URL ?? "http://localhost:5173";
+if (!process.env.CLIENT_URL) {
+  console.warn("WARN: CLIENT_URL not set, defaulting to http://localhost:5173");
+}
+app.use(cors({ origin: clientOrigin }));
+app.use(express.json({ limit: "100kb" }));
 
 // --- Repo metadata store ---
 // Lives alongside the vector store (which holds chunks). Same lifetime, same process.
@@ -100,9 +104,8 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
 
     return res.status(201).json({ repoId, metadata });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown ingestion error";
     console.error(`Ingestion failed for ${url}:`, err);
-    return res.status(500).json({ error: `Ingestion failed: ${message}` });
+    return res.status(500).json({ error: "Ingestion failed. Check the URL and try again." });
   }
 });
 
@@ -128,6 +131,9 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
   if (!query || typeof query !== "string") {
     return res.status(400).json({ error: "Missing or invalid 'query' in request body" });
   }
+  if (query.length > 2000) {
+    return res.status(400).json({ error: "Query too long. Max 2000 characters." });
+  }
   const metadata = repoMetadataStore.get(repoId);
   if (!metadata || !hasRepo(repoId)) {
     return res.status(404).json({ error: "Repo not found. It may have expired or never been ingested." });
@@ -151,20 +157,22 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
 
     for await (const textChunk of streamAnswer(query, results, metadata)) {
       if (clientClosed) return;
-      // SSE frame format: `data: <payload>\n\n`. Newlines inside the payload
-      // would split the frame, so encode them — the client decodes on receive.
-      const safe = textChunk.replace(/\n/g, "\\n");
+      // SSE frame format: `data: <payload>\n\n`. Both \n and \r terminate a
+      // frame, so encode both — the client decodes on receive.
+      const safe = textChunk.replace(/\r/g, "\\r").replace(/\n/g, "\\n");
       res.write(`data: ${safe}\n\n`);
     }
 
     if (!clientClosed) {
-      res.write(`data: [DONE]\n\n`);
+      // Use a named SSE event so the done sentinel can't be spoofed by LLM
+      // output containing the literal string `[DONE]`.
+      res.write(`event: done\ndata: \n\n`);
       res.end();
     }
   } catch (err) {
     console.error("Query stream error:", err);
     if (!clientClosed) {
-      res.write(`data: [ERROR] Something went wrong\n\n`);
+      res.write(`event: error\ndata: Something went wrong\n\n`);
       res.end();
     }
   }
@@ -178,6 +186,9 @@ app.post("/api/repos/:id/change-guide", async (req: Request, res: Response) => {
   if (!description || typeof description !== "string") {
     return res.status(400).json({ error: "Missing or invalid 'description' in request body" });
   }
+  if (description.length > 2000) {
+    return res.status(400).json({ error: "Query too long. Max 2000 characters." });
+  }
   const metadata = repoMetadataStore.get(repoId);
   if (!metadata || !hasRepo(repoId)) {
     return res.status(404).json({ error: "Repo not found. It may have expired or never been ingested." });
@@ -189,16 +200,15 @@ app.post("/api/repos/:id/change-guide", async (req: Request, res: Response) => {
     const guide = await generateChangeGuide(description, results, metadata);
     return res.json(guide);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Change guide failed:", err);
-    return res.status(500).json({ error: `Change guide failed: ${message}` });
+    return res.status(500).json({ error: "Failed to generate change guide." });
   }
 });
 
 // --- Error handler ---
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err.stack);
-  res.status(500).json({ error: err.message ?? "Internal server error" });
+  res.status(500).json({ error: "Internal server error" });
 });
 
 app.listen(PORT, () => {

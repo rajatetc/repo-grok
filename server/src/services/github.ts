@@ -28,12 +28,59 @@ export function parseGitHubUrl(url: string): {
   repo: string;
   branch?: string;
 } {
-  // Strip trailing slash and .git suffix before parsing
-  const cleaned = url.trim().replace(/\/$/, "").replace(/\.git$/, "");
-  // Branch capture uses .+ (not [^/]+) so feature/my-branch works
-  const match = cleaned.match(/github\.com\/([^/]+)\/([^/]+?)(?:\/tree\/(.+))?$/);
-  if (!match) throw new Error(`Invalid GitHub URL: ${url}`);
-  return { owner: match[1], repo: match[2], branch: match[3] };
+  // Parse via WHATWG URL so we can enforce protocol/hostname and reject
+  // credentials embedded in the URL (e.g. https://x-access-token:TOKEN@github.com/...).
+  let parsed: URL;
+  try {
+    parsed = new URL(url.trim());
+  } catch {
+    throw new Error("Invalid GitHub URL");
+  }
+
+  if (parsed.protocol !== "https:") {
+    throw new Error("Invalid GitHub URL");
+  }
+  if (parsed.hostname !== "github.com") {
+    throw new Error("Invalid GitHub URL");
+  }
+  if (parsed.username !== "" || parsed.password !== "") {
+    // Never log the raw URL — it may contain a token.
+    throw new Error("Invalid GitHub URL");
+  }
+
+  // Strip leading slash, trailing slash, and a trailing `.git` from the path.
+  const pathname = parsed.pathname
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "")
+    .replace(/\.git$/, "");
+
+  const parts = pathname.split("/");
+  if (parts.length < 2) {
+    throw new Error("Invalid GitHub URL");
+  }
+
+  const owner = parts[0];
+  const repo = parts[1];
+
+  const ownerRepoPattern = /^[A-Za-z0-9._-]{1,100}$/;
+  if (!ownerRepoPattern.test(owner) || !ownerRepoPattern.test(repo)) {
+    throw new Error("Invalid GitHub URL");
+  }
+
+  let branch: string | undefined;
+  if (parts.length > 2) {
+    // Expect `/tree/<branch>` after owner/repo. Anything else is invalid.
+    if (parts[2] !== "tree" || parts.length < 4) {
+      throw new Error(`Invalid GitHub URL for ${owner}/${repo}`);
+    }
+    branch = parts.slice(3).join("/");
+    const branchPattern = /^[A-Za-z0-9._\-\/]{1,250}$/;
+    if (!branchPattern.test(branch) || branch.includes("..")) {
+      throw new Error(`Invalid GitHub URL for ${owner}/${repo}`);
+    }
+  }
+
+  return { owner, repo, branch };
 }
 
 function getExtension(filePath: string): string {
