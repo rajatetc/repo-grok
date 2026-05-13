@@ -5,7 +5,9 @@ const ALLOWED_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
 const MAX_FILE_SIZE = 500 * 1024; // 500KB
 const BATCH_SIZE = 10;
 
-// Only skip truly irrelevant content: third-party code, compiled output, and lock files
+// Skip third-party code, compiled output, lock files, and non-code directories.
+// Examples and demos are kept — they show real usage patterns and make RAG answers
+// better for questions like "how do I use X in a real app?".
 const IGNORED_PATHS = [
   "node_modules/",
   "dist/",
@@ -14,7 +16,9 @@ const IGNORED_PATHS = [
   "package-lock.json",
   "yarn.lock",
   "pnpm-lock.yaml",
-  ".min.", // minified files
+  ".min.",      // minified files
+  "/fixtures/", // large static test data, not code
+  "/website/",  // documentation site source (e.g. Docusaurus), not library code
 ];
 
 function createOctokit(): Octokit {
