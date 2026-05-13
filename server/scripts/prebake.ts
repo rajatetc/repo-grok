@@ -25,12 +25,6 @@ const ALL_EXAMPLES = [
   { owner: "axios",     repo: "axios"   },
 ];
 
-// 90s between repos — lets the 1-min RPM window fully reset
-const INTER_REPO_DELAY_MS = 90_000;
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function alreadySeeded(owner: string, repo: string): Promise<boolean> {
   try {
@@ -53,7 +47,7 @@ async function prebakeOne(owner: string, repo: string): Promise<void> {
     Promise.resolve(chunkFiles(files)),
     detectTechStack(files),
   ]);
-  console.log(`  Parsed → ${chunks.length} chunks (~${chunks.length} embedding calls)`);
+  console.log(`  Parsed → ${chunks.length} chunks`);
 
   const embeddedChunks = await embedChunks(chunks);
 
@@ -76,11 +70,6 @@ async function prebakeOne(owner: string, repo: string): Promise<void> {
 }
 
 async function main() {
-  if (!process.env.GEMINI_API_KEY) {
-    console.error("GEMINI_API_KEY not set.");
-    process.exit(1);
-  }
-
   await mkdir(SEEDS_DIR, { recursive: true });
 
   // Allow filtering by repo name via CLI args: npm run prebake -- immer zustand
@@ -101,12 +90,6 @@ async function main() {
       continue;
     }
     queued++;
-
-    if (queued > 1) {
-      console.log(`\nWaiting ${INTER_REPO_DELAY_MS / 1000}s to let the RPM window reset…`);
-      await sleep(INTER_REPO_DELAY_MS);
-    }
-
     await prebakeOne(owner, repo);
   }
 

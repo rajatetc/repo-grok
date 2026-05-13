@@ -1,23 +1,26 @@
-import { pipeline } from "@xenova/transformers";
+import { pipeline, type FeatureExtractionPipeline } from "@xenova/transformers";
 import type { CodeChunk } from "../types/index.js";
 
 // all-MiniLM-L6-v2: 23MB, 384-dim vectors, good semantic similarity.
 // Downloads once on first run and caches locally — no API calls ever.
 const MODEL = "Xenova/all-MiniLM-L6-v2";
 
-// Singleton — loading the model takes ~10s, so we do it once at startup.
-let extractor: Awaited<ReturnType<typeof pipeline>> | null = null;
+// Promise-cached singleton — multiple concurrent calls safely share one load.
+let modelPromise: ReturnType<typeof pipeline> | null = null;
 
-export async function loadEmbeddingModel(): Promise<void> {
-  if (extractor) return;
-  console.log("Loading embedding model (first run may download ~23MB)…");
-  extractor = await pipeline("feature-extraction", MODEL);
-  console.log("Embedding model ready.");
+export function loadEmbeddingModel(): ReturnType<typeof pipeline> {
+  if (!modelPromise) {
+    console.log("Loading embedding model (first run may download ~23MB)…");
+    modelPromise = pipeline("feature-extraction", MODEL).then((m) => {
+      console.log("Embedding model ready.");
+      return m;
+    });
+  }
+  return modelPromise;
 }
 
-async function getExtractor() {
-  if (!extractor) await loadEmbeddingModel();
-  return extractor!;
+async function getExtractor(): Promise<FeatureExtractionPipeline> {
+  return loadEmbeddingModel() as Promise<FeatureExtractionPipeline>;
 }
 
 function chunkToText(chunk: CodeChunk): string {
@@ -31,10 +34,8 @@ function chunkToText(chunk: CodeChunk): string {
 
 async function embedText(text: string): Promise<number[]> {
   const model = await getExtractor();
-  // Cast needed: @xenova/transformers returns a broad union type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const output = await (model as any)(text, { pooling: "mean", normalize: true }) as { data: Float32Array };
-  return Array.from(output.data);
+  const output = await model(text, { pooling: "mean", normalize: true });
+  return Array.from((output as { data: Float32Array }).data);
 }
 
 export async function embedChunks(chunks: CodeChunk[]): Promise<CodeChunk[]> {
