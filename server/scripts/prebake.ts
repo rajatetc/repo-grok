@@ -1,17 +1,10 @@
 /**
- * Generates seed files for the example repos in server/seeds/.
- * Commit the resulting JSON files — the server loads them on startup
- * with zero Gemini API calls.
+ * Generates seed files for the 3 example repos.
+ * Run once: npm run prebake
+ * Then commit server/seeds/ — server loads them on startup with zero API calls.
  *
- * Usage:
- *   npm run prebake              # bake all repos not yet seeded
- *   npm run prebake -- immer     # bake a single repo by name
- *
- * Free tier limits: ~100 RPM, 1000 req/day per Google project.
- * Estimated calls: immer~100, zustand~200, express~300, axios~300, redux~400.
- * Run in two batches across two days if needed:
- *   Day 1: npm run prebake -- immer zustand express   (~600 calls)
- *   Day 2: npm run prebake -- axios redux             (~700 calls)
+ * Estimated quota: redux~400 + express~300 + axios~300 = ~1000 embedding calls.
+ * Fits in the free tier 1000 req/day limit if nothing else has been indexed today.
  */
 import "dotenv/config";
 import { mkdir, writeFile, access } from "node:fs/promises";
@@ -28,10 +21,8 @@ const SEEDS_DIR = join(dirname(fileURLToPath(import.meta.url)), "../seeds");
 
 const ALL_EXAMPLES = [
   { owner: "reduxjs",   repo: "redux"   },
-  { owner: "pmndrs",    repo: "zustand" },
   { owner: "expressjs", repo: "express" },
   { owner: "axios",     repo: "axios"   },
-  { owner: "immerjs",   repo: "immer"   },
 ];
 
 // 90s between repos — lets the 1-min RPM window fully reset
