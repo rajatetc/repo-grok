@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.local
+
+# Personal notes — keep locally, don't commit
+NOTES.md
+IDEAS.md
+SCRATCH.md
+*.notes.md
