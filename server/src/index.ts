@@ -17,7 +17,7 @@ function clientError(err: unknown, fallback: string): string {
 import { fetchRepo } from "./services/github.js";
 import { chunkFiles } from "./services/chunker.js";
 import { detectTechStack } from "./utils/techDetector.js";
-import { embedChunks, embedQuery } from "./services/embeddings.js";
+import { embedChunks, embedQuery, loadEmbeddingModel } from "./services/embeddings.js";
 import { storeChunks, search, hasRepo } from "./services/vectorStore.js";
 import { streamAnswer, generateChangeGuide } from "./services/llm.js";
 import { loadSeeds } from "./services/seeds.js";
@@ -25,8 +25,7 @@ import { normalizeUrl } from "./utils/normalizeUrl.js";
 import type { RepoMetadata } from "./types/index.js";
 
 if (!process.env.GEMINI_API_KEY) {
-  console.error("ERROR: GEMINI_API_KEY is not set. Copy .env.example to .env and add your key.");
-  process.exit(1);
+  console.warn("WARN: GEMINI_API_KEY not set — chat and change-guide will fail, but indexing will work.");
 }
 if (!process.env.GITHUB_TOKEN) {
   console.warn("WARN: GITHUB_TOKEN is not set. GitHub API limited to 60 req/hr.");
@@ -241,7 +240,9 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: clientError(err, "Internal server error") });
 });
 
-// Load pre-baked example repos so they're available instantly on startup
+// Warm up the local embedding model and load pre-baked seeds in parallel
+loadEmbeddingModel().catch((err) => console.warn("Embedding model failed to load:", err));
+
 loadSeeds().then(({ urlMap, metadataMap }) => {
   for (const [url, id] of urlMap) urlCache.set(url, id);
   for (const [id, meta] of metadataMap) repoMetadataStore.set(id, meta);

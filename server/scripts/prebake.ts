@@ -3,8 +3,8 @@
  * Run once: npm run prebake
  * Then commit server/seeds/ — server loads them on startup with zero API calls.
  *
- * Estimated quota: redux~400 + express~300 + axios~300 = ~1000 embedding calls.
- * Fits in the free tier 1000 req/day limit if nothing else has been indexed today.
+ * Embeddings are computed locally (no Gemini quota used).
+ * Only needs GEMINI_API_KEY if you add LLM-based steps here in future.
  */
 import "dotenv/config";
 import { mkdir, writeFile, access } from "node:fs/promises";
