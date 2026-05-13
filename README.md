@@ -41,6 +41,19 @@ cd server && npm run dev
 
 Server runs on `http://localhost:3001`.
 
+## Example repos to try
+
+These are good starting points — small enough to finish quickly, well-known enough to ask interesting questions about:
+
+| Repo | Est. time | Good questions to ask |
+|------|-----------|----------------------|
+| [`sindresorhus/p-limit`](https://github.com/sindresorhus/p-limit) | ~15s | How does the concurrency queue work? |
+| [`ai/nanoid`](https://github.com/ai/nanoid) | ~20s | How is the ID generated? What's the difference between nanoid and customAlphabet? |
+| [`pmndrs/zustand`](https://github.com/pmndrs/zustand) | ~45s | How does the store work? How does middleware compose? |
+| [`colinhacks/zod`](https://github.com/colinhacks/zod) | ~2 min | How does schema parsing work? How are errors collected? |
+
+> **Tip:** Repos under ~100 files finish in under a minute. Large monorepos (React, Next.js) can take 5–10 minutes due to the free-tier embedding limit of 100 requests/min.
+
 ## API
 
 | Method | Path | Description |

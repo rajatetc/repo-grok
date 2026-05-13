@@ -51,6 +51,14 @@ Small UX addition, meaningful improvement to answer quality.
 - Stream ingestion progress via SSE
 - Show live steps: Fetching → Chunking → Embedding (45/312) → Done
 - Estimate time remaining based on chunk count
+- **Pre-flight estimate:** before ingestion starts, use the GitHub tree API (which we already call)
+  to count eligible files and show "~2 min" upfront so users aren't surprised
+- **Example repos on landing page:** show clickable cards for well-known small repos so users can
+  try the product without having to think of a URL. Good candidates:
+  - `sindresorhus/p-limit` (~15s) — async concurrency queue
+  - `ai/nanoid` (~20s) — ID generation
+  - `pmndrs/zustand` (~45s) — state management
+  - `colinhacks/zod` (~2 min) — schema validation
 
 ---
 

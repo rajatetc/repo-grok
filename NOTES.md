@@ -31,8 +31,9 @@ swapping to OpenAI/Anthropic means changing only those two files.
 
 **Current model choices (as of May 2026):**
 - **Embeddings:** `gemini-embedding-001` (768-dim, 2048 token input limit). Replaces `text-embedding-004`
-  which was removed from the API. Does not support `batchEmbedContents` — we use 20 parallel
-  `embedContent` calls per batch instead.
+  which was removed from the API. Does not support `batchEmbedContents` — we use 5 parallel
+  `embedContent` calls per batch with a 3.5s delay, targeting ~80 RPM (free tier cap is 100 RPM).
+  Each chunk = 1 API call, so a 150-chunk repo takes ~2 min, a 500-chunk repo ~10 min.
 - **LLM:** `gemini-2.5-flash`. `gemini-2.0-flash` has `limit: 0` on AI Studio free tier keys.
 
 ---

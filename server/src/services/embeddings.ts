@@ -4,10 +4,10 @@ import type { CodeChunk } from "../types/index.js";
 // gemini-embedding-001 is the current free-tier embedding model (replaces text-embedding-004).
 // It supports embedContent but NOT batchEmbedContents, so we parallelize within each batch.
 const EMBEDDING_MODEL = "models/gemini-embedding-001";
-// Free tier: 1500 RPM. 10 concurrent keeps us at ~600 RPM peak, well clear of the limit.
-const BATCH_SIZE = 10;
-// Pause between batches to avoid sustained rate pressure
-const BATCH_DELAY_MS = 500;
+// Free tier hard limit: 100 RPM for embedContent.
+// BATCH_SIZE=5 + BATCH_DELAY_MS=3500 → 5 * (60/3.7s) ≈ 80 RPM — safely under the cap.
+const BATCH_SIZE = 5;
+const BATCH_DELAY_MS = 3500;
 
 function getModel() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
@@ -39,9 +39,12 @@ async function embedOne(text: string, attempt = 0): Promise<number[]> {
     return result.embedding.values;
   } catch (err) {
     const isRateLimit = (err as { status?: number }).status === 429;
-    if (isRateLimit && attempt < 3) {
-      const delay = (attempt + 1) * 5000; // 5s, 10s, 15s
-      console.warn(`Rate limited by Gemini, retrying in ${delay / 1000}s...`);
+    if (isRateLimit && attempt < 5) {
+      // Jitter prevents all concurrent calls retrying at the exact same moment
+      const base = (attempt + 1) * 10000; // 10s, 20s, 30s, 40s, 50s
+      const jitter = Math.random() * 3000;
+      const delay = base + jitter;
+      console.warn(`Rate limited, retrying in ${(delay / 1000).toFixed(1)}s (attempt ${attempt + 1}/5)...`);
       await sleep(delay);
       return embedOne(text, attempt + 1);
     }
