@@ -1,8 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { CodeChunk } from "../types/index.js";
 
-// text-embedding-004 is free tier, 100 RPM, up to 100 texts per batch call
-const EMBEDDING_MODEL = "text-embedding-004";
+// text-embedding-004 via v1 endpoint (not v1beta — batchEmbedContents not available there)
+const EMBEDDING_MODEL = "models/text-embedding-004";
 const BATCH_SIZE = 100;
 // Pause between batches to stay under the 100 RPM free-tier limit
 const BATCH_DELAY_MS = 1000;
