@@ -1,0 +1,62 @@
+.container { display: flex; flex-direction: column; gap: 40px; }
+
+.section {}
+
+.heading {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.badge {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid rgba(99,102,241,0.25);
+  border-radius: 99px;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.empty {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.tree {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  font-size: 13px;
+  font-family: ui-monospace, monospace;
+  max-height: 480px;
+  overflow-y: auto;
+  line-height: 1.8;
+}
+
+.dir {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.dirIcon {
+  color: var(--accent);
+}
+
+.file {
+  color: var(--text-muted);
+}
+
+.fileIcon {
+  color: var(--border);
+}
