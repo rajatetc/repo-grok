@@ -55,9 +55,11 @@ Small UX addition, meaningful improvement to answer quality.
   to count eligible files and show "~2 min" upfront so users aren't surprised
 - **Example repos on landing page:** show clickable cards for well-known small repos so users can
   try the product without having to think of a URL. Good candidates:
-  - `sindresorhus/p-limit` (~15s) — async concurrency queue
-  - `ai/nanoid` (~20s) — ID generation
-  - `pmndrs/zustand` (~45s) — state management
+  - `immerjs/immer` (~30s) — immutable state
+  - `reduxjs/redux` (~30s) — classic state manager
+  - `pmndrs/zustand` (~45s) — lightweight state management
+  - `vercel/swr` (~45s) — data fetching hooks
+  - `axios/axios` (~1 min) — HTTP client
   - `colinhacks/zod` (~2 min) — schema validation
 
 ---

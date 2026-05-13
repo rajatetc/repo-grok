@@ -47,9 +47,11 @@ These are good starting points — small enough to finish quickly, well-known en
 
 | Repo | Est. time | Good questions to ask |
 |------|-----------|----------------------|
-| [`sindresorhus/p-limit`](https://github.com/sindresorhus/p-limit) | ~15s | How does the concurrency queue work? |
-| [`ai/nanoid`](https://github.com/ai/nanoid) | ~20s | How is the ID generated? What's the difference between nanoid and customAlphabet? |
-| [`pmndrs/zustand`](https://github.com/pmndrs/zustand) | ~45s | How does the store work? How does middleware compose? |
+| [`immerjs/immer`](https://github.com/immerjs/immer) | ~30s | How does produce() work under the hood? How are drafts tracked? |
+| [`reduxjs/redux`](https://github.com/reduxjs/redux) | ~30s | How does createStore work? How does middleware compose? |
+| [`pmndrs/zustand`](https://github.com/pmndrs/zustand) | ~45s | How is the store created? How does the React binding work? |
+| [`vercel/swr`](https://github.com/vercel/swr) | ~45s | How does cache invalidation work? How are concurrent requests deduplicated? |
+| [`axios/axios`](https://github.com/axios/axios) | ~1 min | How are interceptors implemented? How does request cancellation work? |
 | [`colinhacks/zod`](https://github.com/colinhacks/zod) | ~2 min | How does schema parsing work? How are errors collected? |
 
 > **Tip:** Repos under ~100 files finish in under a minute. Large monorepos (React, Next.js) can take 5–10 minutes due to the free-tier embedding limit of 100 requests/min.
