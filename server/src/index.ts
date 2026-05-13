@@ -45,6 +45,14 @@ app.use(express.json({ limit: "100kb" }));
 // Keyed by the repoId we hand back to the client after ingestion.
 const repoMetadataStore = new Map<string, RepoMetadata>();
 
+// --- URL dedup cache ---
+// Normalized URL → repoId so re-submitting the same repo is instant.
+const urlCache = new Map<string, string>();
+
+function normalizeUrl(url: string): string {
+  return url.trim().toLowerCase().replace(/\.git$/, "").replace(/\/$/, "");
+}
+
 // --- Rate limiters ---
 // General limiter: protects against accidental loops / abusive clients.
 // Ingest limiter is stricter because ingestion pulls a whole repo, embeds every
@@ -79,6 +87,13 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing or invalid 'url' in request body" });
   }
 
+  const normalized = normalizeUrl(url);
+  const cached = urlCache.get(normalized);
+  if (cached && repoMetadataStore.has(cached)) {
+    console.log(`Cache hit: ${url} → ${cached}`);
+    return res.status(200).json({ repoId: cached, metadata: repoMetadataStore.get(cached) });
+  }
+
   const repoId = randomUUID();
   const startedAt = Date.now();
 
@@ -107,6 +122,7 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
       ingestedAt: new Date().toISOString(),
     };
     repoMetadataStore.set(repoId, metadata);
+    urlCache.set(normalized, repoId);
 
     const elapsedMs = Date.now() - startedAt;
     console.log(`Ingested ${owner}/${repo} in ${elapsedMs}ms — ${embeddedChunks.length} chunks`);
