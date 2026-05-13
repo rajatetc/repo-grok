@@ -32,6 +32,16 @@ function chunkToText(chunk: CodeChunk): string {
   return parts.filter(Boolean).join("\n");
 }
 
+// Parse the retryDelay Google sends back (e.g. "57s" → 57000 ms).
+// Falls back to null so callers can use their own escalating delay.
+function parseRetryDelayMs(err: unknown): number | null {
+  const e = err as { errorDetails?: Array<{ "@type"?: string; retryDelay?: string }> };
+  const retryInfo = e.errorDetails?.find((d) => d["@type"]?.endsWith("RetryInfo"));
+  if (!retryInfo?.retryDelay) return null;
+  const match = retryInfo.retryDelay.match(/^(\d+)s$/);
+  return match ? parseInt(match[1], 10) * 1000 : null;
+}
+
 async function embedOne(text: string, attempt = 0): Promise<number[]> {
   try {
     const model = getModel();
@@ -40,11 +50,12 @@ async function embedOne(text: string, attempt = 0): Promise<number[]> {
   } catch (err) {
     const isRateLimit = (err as { status?: number }).status === 429;
     if (isRateLimit && attempt < 5) {
-      // Jitter prevents all concurrent calls retrying at the exact same moment
-      const base = (attempt + 1) * 10000; // 10s, 20s, 30s, 40s, 50s
+      // Respect Google's own retryDelay when present; fall back to escalating backoff
+      const apiDelay = parseRetryDelayMs(err);
+      const base = apiDelay ?? (attempt + 1) * 12000; // 12s, 24s, 36s, 48s, 60s
       const jitter = Math.random() * 3000;
       const delay = base + jitter;
-      console.warn(`Rate limited, retrying in ${(delay / 1000).toFixed(1)}s (attempt ${attempt + 1}/5)...`);
+      console.warn(`Rate limited — retrying in ${(delay / 1000).toFixed(1)}s (attempt ${attempt + 1}/5)…`);
       await sleep(delay);
       return embedOne(text, attempt + 1);
     }

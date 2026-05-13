@@ -130,6 +130,12 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
     return res.status(201).json({ repoId, metadata });
   } catch (err) {
     console.error(`Ingestion failed for ${url}:`, err);
+    // Surface Gemini quota errors directly — they're actionable for the user
+    if ((err as { status?: number }).status === 429) {
+      return res.status(503).json({
+        error: "Gemini API quota limit reached. This usually resets within a minute — please try again shortly.",
+      });
+    }
     return res.status(500).json({ error: clientError(err, "Ingestion failed. Check the URL and try again.") });
   }
 });
