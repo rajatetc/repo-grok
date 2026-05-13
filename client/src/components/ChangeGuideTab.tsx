@@ -29,37 +29,39 @@ export default function ChangeGuideTab({ repoId }: Props) {
 
   return (
     <div className={styles.container}>
-      <form className={styles.form} onSubmit={handleSubmit}>
-        <label className={styles.label}>Describe the change you want to make</label>
-        <textarea
-          className={styles.textarea}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="e.g. Add support for optimistic updates in the store…"
-          rows={4}
-          disabled={loading}
-        />
-        <button className={styles.button} type="submit" disabled={loading || !description.trim()}>
-          {loading ? "Generating…" : "Get Guide"}
-        </button>
-      </form>
+      <div className={styles.inner}>
+        <form className={styles.form} onSubmit={handleSubmit}>
+          <label className={styles.label}>Describe the change you want to make</label>
+          <textarea
+            className={styles.textarea}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="e.g. Add support for optimistic updates in the store…"
+            rows={4}
+            disabled={loading}
+          />
+          <button className={styles.button} type="submit" disabled={loading || !description.trim()}>
+            {loading ? "Generating…" : "Get Guide"}
+          </button>
+        </form>
 
-      {error && <p className={styles.error}>{error}</p>}
+        {error && <p className={styles.error}>{error}</p>}
 
-      {result && (
-        <div className={styles.result}>
-          <p className={styles.summary}>{result.summary}</p>
-          <div className={styles.files}>
-            {result.filesToModify.map((f, i) => (
-              <div key={i} className={styles.fileCard}>
-                <div className={styles.filePath}>{f.filePath}</div>
-                <p className={styles.reason}>{f.reason}</p>
-                <p className={styles.suggestion}>{f.suggestion}</p>
-              </div>
-            ))}
+        {result && (
+          <div className={styles.result}>
+            <p className={styles.summary}>{result.summary}</p>
+            <div className={styles.files}>
+              {result.filesToModify.map((f, i) => (
+                <div key={i} className={styles.fileCard}>
+                  <div className={styles.filePath}>{f.filePath}</div>
+                  <p className={styles.reason}>{f.reason}</p>
+                  <p className={styles.suggestion}>{f.suggestion}</p>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

@@ -16,7 +16,6 @@ export default function ChatTab({ repoId }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Cancel stream on unmount
   useEffect(() => () => { cleanupRef.current?.(); }, []);
 
   function handleSubmit(e: FormEvent) {
@@ -48,14 +47,22 @@ export default function ChatTab({ repoId }: Props) {
           <div className={styles.empty}>
             <p>Ask anything about this codebase.</p>
             <p className={styles.suggestions}>
-              Try: "How does the main logic work?" · "What patterns are used?" · "How is error handling done?"
+              "How does the main logic work?" · "What patterns are used?" · "How is error handling done?"
             </p>
           </div>
         )}
-        {messages.map((msg) => (
-          <div key={msg.id} className={`${styles.message} ${styles[msg.role]}`}>
-            <span className={styles.roleLabel}>{msg.role === "user" ? "You" : "Assistant"}</span>
-            <p className={styles.content}>{msg.content}{msg.role === "assistant" && streaming && msg === messages[messages.length - 1] && <span className={styles.cursor} />}</p>
+        {messages.map((msg, i) => (
+          <div key={msg.id} className={`${styles.row} ${msg.role === "user" ? styles.rowUser : styles.rowAssistant}`}>
+            {msg.role === "user" ? (
+              <div className={styles.userBubble}>{msg.content}</div>
+            ) : (
+              <div className={styles.assistantMsg}>
+                <p className={styles.content}>
+                  {msg.content}
+                  {streaming && i === messages.length - 1 && <span className={styles.cursor} />}
+                </p>
+              </div>
+            )}
           </div>
         ))}
         <div ref={bottomRef} />
@@ -66,11 +73,11 @@ export default function ChatTab({ repoId }: Props) {
           className={styles.input}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask a question about this repo…"
+          placeholder="Ask anything about this repo…"
           disabled={streaming}
         />
         <button className={styles.button} type="submit" disabled={streaming || !input.trim()}>
-          {streaming ? "…" : "Send"}
+          {streaming ? "…" : "↑"}
         </button>
       </form>
     </div>
