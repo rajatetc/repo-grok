@@ -15,7 +15,10 @@ const RESPONSE_SCHEMA = {
 };
 
 export async function detectTechStack(files: RepoFile[]): Promise<TechStack> {
-  const pkgFile = files.find((f) => f.path === "package.json");
+  // Prefer root package.json; fall back to the first one found (e.g. server/package.json)
+  const pkgFile =
+    files.find((f) => f.path === "package.json") ??
+    files.find((f) => f.path.endsWith("/package.json"));
 
   // Collect config file names — gives Gemini extra signal beyond package.json
   // e.g. tailwind.config.ts, next.config.js, prisma/schema.prisma

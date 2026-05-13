@@ -4,8 +4,8 @@ import type { CodeChunk } from "../types/index.js";
 // gemini-embedding-001 is the current free-tier embedding model (replaces text-embedding-004).
 // It supports embedContent but NOT batchEmbedContents, so we parallelize within each batch.
 const EMBEDDING_MODEL = "models/gemini-embedding-001";
-// Free tier: 1500 RPM, so 20 concurrent requests per batch is safe
-const BATCH_SIZE = 20;
+// Free tier: 1500 RPM. 10 concurrent keeps us at ~600 RPM peak, well clear of the limit.
+const BATCH_SIZE = 10;
 // Pause between batches to avoid sustained rate pressure
 const BATCH_DELAY_MS = 500;
 

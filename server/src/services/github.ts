@@ -92,6 +92,8 @@ function getExtension(filePath: string): string {
 
 function isAllowedFile(path: string): boolean {
   if (IGNORED_PATHS.some((p) => path.includes(p))) return false;
+  const filename = path.split("/").pop() ?? "";
+  if (filename === "package.json") return true;
   return ALLOWED_EXTENSIONS.has(getExtension(path));
 }
 
