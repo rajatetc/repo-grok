@@ -50,6 +50,10 @@ Server runs on `http://localhost:3001`.
 | `POST` | `/api/repos/:id/query` | Ask a question about the repo |
 | `POST` | `/api/repos/:id/change-guide` | Describe a change, get file-level guidance |
 
+## License
+
+MIT
+
 ## Tech stack
 
 - **Backend:** Node.js + Express + TypeScript
