@@ -1,11 +1,13 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { CodeChunk } from "../types/index.js";
 
-// text-embedding-004 via v1 endpoint (not v1beta — batchEmbedContents not available there)
-const EMBEDDING_MODEL = "models/text-embedding-004";
-const BATCH_SIZE = 100;
-// Pause between batches to stay under the 100 RPM free-tier limit
-const BATCH_DELAY_MS = 1000;
+// gemini-embedding-001 is the current free-tier embedding model (replaces text-embedding-004).
+// It supports embedContent but NOT batchEmbedContents, so we parallelize within each batch.
+const EMBEDDING_MODEL = "models/gemini-embedding-001";
+// Free tier: 1500 RPM, so 20 concurrent requests per batch is safe
+const BATCH_SIZE = 20;
+// Pause between batches to avoid sustained rate pressure
+const BATCH_DELAY_MS = 500;
 
 function getModel() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
@@ -30,28 +32,28 @@ function chunkToText(chunk: CodeChunk): string {
   return parts.filter(Boolean).join("\n");
 }
 
-async function embedBatch(texts: string[], attempt = 0): Promise<number[][]> {
+async function embedOne(text: string, attempt = 0): Promise<number[]> {
   try {
     const model = getModel();
-    const result = await model.batchEmbedContents({
-      requests: texts.map((text) => ({
-        content: { parts: [{ text }], role: "user" },
-      })),
-    });
-    return result.embeddings.map((e) => e.values);
+    const result = await model.embedContent(text);
+    return result.embedding.values;
   } catch (err) {
     const isRateLimit = (err as { status?: number }).status === 429;
     if (isRateLimit && attempt < 3) {
       const delay = (attempt + 1) * 5000; // 5s, 10s, 15s
       console.warn(`Rate limited by Gemini, retrying in ${delay / 1000}s...`);
       await sleep(delay);
-      return embedBatch(texts, attempt + 1);
+      return embedOne(text, attempt + 1);
     }
     throw err;
   }
 }
 
-// Embeds all chunks in batches of 100, with a 1s pause between batches.
+async function embedBatch(texts: string[]): Promise<number[][]> {
+  return Promise.all(texts.map((text) => embedOne(text)));
+}
+
+// Embeds all chunks in parallel batches of 20, with a 500ms pause between batches.
 // Mutates each chunk in-place by setting chunk.embedding.
 // Returns the same array (with embeddings filled in) for convenience.
 export async function embedChunks(chunks: CodeChunk[]): Promise<CodeChunk[]> {
@@ -69,7 +71,6 @@ export async function embedChunks(chunks: CodeChunk[]): Promise<CodeChunk[]> {
     const progress = Math.min(i + BATCH_SIZE, chunks.length);
     console.log(`  Embedded ${progress}/${chunks.length}`);
 
-    // Don't sleep after the last batch
     if (i + BATCH_SIZE < chunks.length) await sleep(BATCH_DELAY_MS);
   }
 
@@ -78,7 +79,5 @@ export async function embedChunks(chunks: CodeChunk[]): Promise<CodeChunk[]> {
 
 // Embed a single query string (used at search time, not ingestion time)
 export async function embedQuery(query: string): Promise<number[]> {
-  const model = getModel();
-  const result = await model.embedContent(query);
-  return result.embedding.values;
+  return embedOne(query);
 }

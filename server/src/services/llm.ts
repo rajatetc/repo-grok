@@ -20,7 +20,7 @@ const CHANGE_GUIDE_SCHEMA = {
   },
 };
 
-const LLM_MODEL = "gemini-2.0-flash";
+const LLM_MODEL = "gemini-2.5-flash";
 
 function getModel() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
