@@ -1,7 +1,17 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
+import { randomUUID } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
+
+import { fetchRepo } from "./services/github.js";
+import { chunkFiles } from "./services/chunker.js";
+import { detectTechStack } from "./utils/techDetector.js";
+import { embedChunks, embedQuery } from "./services/embeddings.js";
+import { storeChunks, search, hasRepo } from "./services/vectorStore.js";
+import { streamAnswer, generateChangeGuide } from "./services/llm.js";
+import type { RepoMetadata } from "./types/index.js";
 
 if (!process.env.GEMINI_API_KEY) {
   console.error("ERROR: GEMINI_API_KEY is not set. Copy .env.example to .env and add your key.");
@@ -17,30 +27,172 @@ const PORT = process.env.PORT ?? 3001;
 app.use(cors({ origin: process.env.CLIENT_URL ?? "http://localhost:5173" }));
 app.use(express.json({ limit: "10mb" }));
 
-// --- Routes (stubs — filled in phase by phase) ---
+// --- Repo metadata store ---
+// Lives alongside the vector store (which holds chunks). Same lifetime, same process.
+// Keyed by the repoId we hand back to the client after ingestion.
+const repoMetadataStore = new Map<string, RepoMetadata>();
+
+// --- Rate limiters ---
+// General limiter: protects against accidental loops / abusive clients.
+// Ingest limiter is stricter because ingestion pulls a whole repo, embeds every
+// chunk, and burns Gemini quota — far more expensive than a single query.
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const ingestLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many ingestion requests. Try again in an hour." },
+});
+
+app.use(generalLimiter);
+
+// --- Routes ---
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 // POST /api/repos — ingest a GitHub repo
-app.post("/api/repos", (_req: Request, res: Response) => {
-  res.status(501).json({ error: "Not implemented yet" });
+app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
+  const { url } = req.body ?? {};
+  if (!url || typeof url !== "string") {
+    return res.status(400).json({ error: "Missing or invalid 'url' in request body" });
+  }
+
+  const repoId = randomUUID();
+  const startedAt = Date.now();
+
+  try {
+    const { files, owner, repo, branch, folderTree } = await fetchRepo(url);
+
+    // Chunking and tech detection are independent — run them in parallel.
+    const [chunks, techStack] = await Promise.all([
+      Promise.resolve(chunkFiles(files)),
+      detectTechStack(files),
+    ]);
+
+    const embeddedChunks = await embedChunks(chunks);
+    storeChunks(repoId, embeddedChunks);
+
+    const metadata: RepoMetadata = {
+      id: repoId,
+      url,
+      owner,
+      repo,
+      branch,
+      fileCount: files.length,
+      totalChunks: embeddedChunks.length,
+      techStack,
+      folderTree,
+      ingestedAt: new Date().toISOString(),
+    };
+    repoMetadataStore.set(repoId, metadata);
+
+    const elapsedMs = Date.now() - startedAt;
+    console.log(`Ingested ${owner}/${repo} in ${elapsedMs}ms — ${embeddedChunks.length} chunks`);
+
+    return res.status(201).json({ repoId, metadata });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown ingestion error";
+    console.error(`Ingestion failed for ${url}:`, err);
+    return res.status(500).json({ error: `Ingestion failed: ${message}` });
+  }
 });
 
 // GET /api/repos/:id/overview — repo overview
-app.get("/api/repos/:id/overview", (_req: Request, res: Response) => {
-  res.status(501).json({ error: "Not implemented yet" });
+app.get("/api/repos/:id/overview", async (req: Request, res: Response) => {
+  try {
+    const metadata = repoMetadataStore.get(req.params.id);
+    if (!metadata) {
+      return res.status(404).json({ error: "Repo not found. It may have expired or never been ingested." });
+    }
+    return res.json(metadata);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return res.status(500).json({ error: message });
+  }
 });
 
-// POST /api/repos/:id/query — ask a question about the repo
-app.post("/api/repos/:id/query", (_req: Request, res: Response) => {
-  res.status(501).json({ error: "Not implemented yet" });
+// POST /api/repos/:id/query — ask a question (streamed via SSE)
+app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
+  const repoId = req.params.id;
+  const { query } = req.body ?? {};
+
+  if (!query || typeof query !== "string") {
+    return res.status(400).json({ error: "Missing or invalid 'query' in request body" });
+  }
+  const metadata = repoMetadataStore.get(repoId);
+  if (!metadata || !hasRepo(repoId)) {
+    return res.status(404).json({ error: "Repo not found. It may have expired or never been ingested." });
+  }
+
+  // SSE handshake: text/event-stream + no-cache so proxies don't buffer,
+  // keep-alive so the connection stays open across multiple `data:` frames.
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  let clientClosed = false;
+  req.on("close", () => {
+    clientClosed = true;
+  });
+
+  try {
+    const queryVector = await embedQuery(query);
+    const results = search(repoId, queryVector);
+
+    for await (const textChunk of streamAnswer(query, results, metadata)) {
+      if (clientClosed) return;
+      // SSE frame format: `data: <payload>\n\n`. Newlines inside the payload
+      // would split the frame, so encode them — the client decodes on receive.
+      const safe = textChunk.replace(/\n/g, "\\n");
+      res.write(`data: ${safe}\n\n`);
+    }
+
+    if (!clientClosed) {
+      res.write(`data: [DONE]\n\n`);
+      res.end();
+    }
+  } catch (err) {
+    console.error("Query stream error:", err);
+    if (!clientClosed) {
+      res.write(`data: [ERROR] Something went wrong\n\n`);
+      res.end();
+    }
+  }
 });
 
 // POST /api/repos/:id/change-guide — describe a change, get guidance
-app.post("/api/repos/:id/change-guide", (_req: Request, res: Response) => {
-  res.status(501).json({ error: "Not implemented yet" });
+app.post("/api/repos/:id/change-guide", async (req: Request, res: Response) => {
+  const repoId = req.params.id;
+  const { description } = req.body ?? {};
+
+  if (!description || typeof description !== "string") {
+    return res.status(400).json({ error: "Missing or invalid 'description' in request body" });
+  }
+  const metadata = repoMetadataStore.get(repoId);
+  if (!metadata || !hasRepo(repoId)) {
+    return res.status(404).json({ error: "Repo not found. It may have expired or never been ingested." });
+  }
+
+  try {
+    const queryVector = await embedQuery(description);
+    const results = search(repoId, queryVector);
+    const guide = await generateChangeGuide(description, results, metadata);
+    return res.json(guide);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("Change guide failed:", err);
+    return res.status(500).json({ error: `Change guide failed: ${message}` });
+  }
 });
 
 // --- Error handler ---
