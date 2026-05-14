@@ -1,14 +1,25 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useRepoStore } from "../store/useRepoStore";
 import { streamQuery } from "../api";
 import styles from "./ChatTab.module.css";
 
-interface Props { repoId: string }
+interface Props {
+  repoId: string;
+  onOpenKeyModal: () => void;
+}
 
-export default function ChatTab({ repoId }: Props) {
-  const { messages, addMessage, appendToLastMessage } = useRepoStore();
+function isRateLimitError(msg: string) {
+  const lower = msg.toLowerCase();
+  return lower.includes("rate limit") || lower.includes("quota");
+}
+
+export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
+  const { messages, addMessage, appendToLastMessage, geminiKey } = useRepoStore();
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [showKeyNudge, setShowKeyNudge] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
 
@@ -17,6 +28,11 @@ export default function ChatTab({ repoId }: Props) {
   }, [messages]);
 
   useEffect(() => () => { cleanupRef.current?.(); }, []);
+
+  // Dismiss the nudge once the user actually sets a key
+  useEffect(() => {
+    if (geminiKey) setShowKeyNudge(false);
+  }, [geminiKey]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -34,8 +50,9 @@ export default function ChatTab({ repoId }: Props) {
       (chunk) => appendToLastMessage(chunk),
       () => setStreaming(false),
       (err) => {
-        appendToLastMessage(`\n\n[Error: ${err}]`);
+        appendToLastMessage(`\n\n_${err}_`);
         setStreaming(false);
+        if (isRateLimitError(err) && !geminiKey) setShowKeyNudge(true);
       }
     );
   }
@@ -57,16 +74,24 @@ export default function ChatTab({ repoId }: Props) {
               <div className={styles.userBubble}>{msg.content}</div>
             ) : (
               <div className={styles.assistantMsg}>
-                <p className={styles.content}>
-                  {msg.content}
-                  {streaming && i === messages.length - 1 && <span className={styles.cursor} />}
-                </p>
+                <div className={styles.markdown}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                </div>
+                {streaming && i === messages.length - 1 && <span className={styles.cursor} />}
               </div>
             )}
           </div>
         ))}
         <div ref={bottomRef} />
       </div>
+
+      {showKeyNudge && (
+        <div className={styles.keyNudge}>
+          <span>Hitting Gemini's free quota? Bring your own key and keep going.</span>
+          <button className={styles.keyNudgeBtn} onClick={onOpenKeyModal}>Add key →</button>
+          <button className={styles.keyNudgeDismiss} onClick={() => setShowKeyNudge(false)}>✕</button>
+        </div>
+      )}
 
       <form className={styles.form} onSubmit={handleSubmit}>
         <input

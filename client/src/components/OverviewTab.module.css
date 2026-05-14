@@ -12,6 +12,23 @@
   gap: 8px;
 }
 
+/* ── Code unit breakdown pills ── */
+.breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.breakdownPill {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 2px 9px;
+}
+
 .stat {
   background: var(--bg);
   border: 1px solid var(--border);
@@ -73,16 +90,29 @@
   border: 1px solid transparent;
 }
 
-.badge_framework  { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
-.badge_build      { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
-.badge_state      { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe; }
-.badge_test       { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
-.badge_style      { background: #fce7f3; color: #9d174d; border-color: #fbcfe8; }
-.badge_backend    { background: #f3f4f6; color: #374151; border-color: #e5e7eb; }
-.badge_other      { background: #f3f4f6; color: #374151; border-color: #e5e7eb; }
+.badge_framework  { background: var(--badge-framework-bg); color: var(--badge-framework-fg); border-color: var(--badge-framework-bd); }
+.badge_build      { background: var(--badge-build-bg);     color: var(--badge-build-fg);     border-color: var(--badge-build-bd); }
+.badge_state      { background: var(--badge-state-bg);     color: var(--badge-state-fg);     border-color: var(--badge-state-bd); }
+.badge_test       { background: var(--badge-test-bg);      color: var(--badge-test-fg);      border-color: var(--badge-test-bd); }
+.badge_style      { background: var(--badge-style-bg);     color: var(--badge-style-fg);     border-color: var(--badge-style-bd); }
+.badge_backend    { background: var(--badge-neutral-bg);   color: var(--badge-neutral-fg);   border-color: var(--badge-neutral-bd); }
+.badge_other      { background: var(--badge-neutral-bg);   color: var(--badge-neutral-fg);   border-color: var(--badge-neutral-bd); }
 
 /* ── Tree ── */
 .treeSection {}
+
+.treeToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.treeToggle:hover .treeLabel { color: var(--text); }
 
 .treeLabel {
   font-size: 11px;
@@ -90,7 +120,12 @@
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  transition: color 0.15s;
+}
+
+.treeChevron {
+  font-size: 14px;
+  color: var(--text-muted);
 }
 
 .tree {
@@ -125,6 +160,15 @@
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.fileLink {
+  color: inherit;
+  text-decoration: none;
+}
+.fileLink:hover {
+  color: var(--icon-blue);
+  text-decoration: underline;
 }
 
 .fileIcon {

@@ -1,12 +1,17 @@
 import axios from "axios";
-import type { RepoMetadata, ChangeGuideResult } from "../types";
+import type { RepoMetadata } from "../types";
 import { API_BASE } from "../constants";
+import { useRepoStore } from "../store/useRepoStore";
 
 const client = axios.create({ baseURL: API_BASE });
 
-// Extract a human-readable message from any thrown error.
-// Prefers the server's own `{ error: "..." }` body, falls back to
-// status-based messages, then network/unknown messages.
+// Read the in-memory key from the store and attach it to every axios request
+client.interceptors.request.use((config) => {
+  const key = useRepoStore.getState().geminiKey;
+  if (key) config.headers["X-Gemini-Key"] = key;
+  return config;
+});
+
 function extractError(err: unknown): string {
   if (axios.isAxiosError(err)) {
     const serverMsg: string | undefined = err.response?.data?.error;
@@ -45,14 +50,6 @@ export async function getOverview(repoId: string): Promise<RepoMetadata> {
   }
 }
 
-export async function getChangeGuide(repoId: string, description: string): Promise<ChangeGuideResult> {
-  try {
-    const { data } = await client.post(`/api/repos/${repoId}/change-guide`, { description });
-    return data;
-  } catch (err) {
-    throw new Error(extractError(err));
-  }
-}
 
 // Returns a cleanup function — call it to close the SSE connection.
 export function streamQuery(
@@ -64,9 +61,13 @@ export function streamQuery(
 ): () => void {
   const controller = new AbortController();
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const key = useRepoStore.getState().geminiKey;
+  if (key) headers["X-Gemini-Key"] = key;
+
   fetch(`${API_BASE}/api/repos/${repoId}/query`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ query }),
     signal: controller.signal,
   }).then(async (res) => {
@@ -77,6 +78,7 @@ export function streamQuery(
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let pendingEvent = "";
 
     while (true) {
       const { done, value } = await reader.read();
@@ -87,11 +89,16 @@ export function streamQuery(
       buffer = lines.pop() ?? "";
 
       for (const line of lines) {
-        if (line.startsWith("event: done")) { onDone(); return; }
-        if (line.startsWith("event: error")) { onError("Stream error from server."); return; }
-        if (line.startsWith("data: ")) {
+        if (line.startsWith("event: ")) {
+          pendingEvent = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
           const raw = line.slice(6);
+          if (pendingEvent === "done") { onDone(); return; }
+          if (pendingEvent === "error") { onError(raw || "Stream error from server."); return; }
           onChunk(raw.replace(/\\n/g, "\n").replace(/\\r/g, "\r"));
+          pendingEvent = "";
+        } else if (line === "") {
+          pendingEvent = "";
         }
       }
     }

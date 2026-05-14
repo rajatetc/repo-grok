@@ -3,12 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { useRepoStore } from "../store/useRepoStore";
 import { ingestRepo } from "../api";
 import { useIngestionProgress } from "../hooks/useIngestionProgress";
+import { useTheme } from "../hooks/useTheme";
 import { EXAMPLES } from "../constants";
 import styles from "./LandingPage.module.css";
 
 export default function LandingPage() {
   const navigate = useNavigate();
   const { setIngesting, setReady, setError, status, error } = useRepoStore();
+  const { theme, toggle } = useTheme();
   const [url, setUrl] = useState("");
   const isLoading = status === "ingesting";
   const progress = useIngestionProgress(isLoading);
@@ -28,6 +30,10 @@ export default function LandingPage() {
 
   return (
     <div className={styles.page}>
+      <button className={styles.themeBtn} onClick={toggle} title="Toggle theme">
+        {theme === "dark" ? "☀" : "☾"}
+      </button>
+
       <div className={styles.hero}>
         <div className={styles.logo}>
           <span className={styles.logoIcon}>&lt;/&gt;</span>
@@ -60,9 +66,11 @@ export default function LandingPage() {
           </div>
         )}
 
+        <p className={styles.langNote}>JavaScript &amp; TypeScript · Python, Go, Rust coming soon</p>
+
         {isLoading && (
           <p className={styles.hint}>
-            Fetching files · parsing AST · generating embeddings — usually 30s–2 min
+            Fetching files · parsing AST · generating embeddings…
           </p>
         )}
         {status === "error" && error && <p className={styles.errorMsg}>{error}</p>}

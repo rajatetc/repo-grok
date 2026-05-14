@@ -1,3 +1,5 @@
+@import url('https://rsms.me/inter/inter.css');
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
@@ -16,13 +18,54 @@
   --radius: 10px;
   --radius-sm: 6px;
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04);
+
+  /* Button fill — inverts in dark mode */
+  --btn-bg: #111827;
+  --btn-fg: #ffffff;
+  --btn-bg-hover: #333333;
+
+  /* Tech badge colors */
+  --badge-framework-bg: #dbeafe; --badge-framework-fg: #1e40af; --badge-framework-bd: #bfdbfe;
+  --badge-build-bg: #fef9c3;    --badge-build-fg: #854d0e;    --badge-build-bd: #fde68a;
+  --badge-state-bg: #ede9fe;    --badge-state-fg: #6d28d9;    --badge-state-bd: #ddd6fe;
+  --badge-test-bg: #dcfce7;     --badge-test-fg: #166534;     --badge-test-bd: #bbf7d0;
+  --badge-style-bg: #fce7f3;    --badge-style-fg: #9d174d;    --badge-style-bd: #fbcfe8;
+  --badge-neutral-bg: #f3f4f6;  --badge-neutral-fg: #374151;  --badge-neutral-bd: #e5e7eb;
+}
+
+[data-theme="dark"] {
+  --bg: #111827;
+  --bg-card: #1f2937;
+  --bg-input: #1f2937;
+  --border: #374151;
+  --text: #f9fafb;
+  --text-muted: #9ca3af;
+  --accent: #f9fafb;
+  --accent-hover: #e5e7eb;
+  --accent-dim: rgba(255,255,255,0.07);
+  --icon-blue: #60a5fa;
+  --success: #4ade80;
+  --error: #f87171;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,0,0,0.2);
+
+  --btn-bg: #f9fafb;
+  --btn-fg: #111827;
+  --btn-bg-hover: #e5e7eb;
+
+  --badge-framework-bg: #1e3a5f; --badge-framework-fg: #93c5fd; --badge-framework-bd: #2563eb;
+  --badge-build-bg: #422006;     --badge-build-fg: #fcd34d;    --badge-build-bd: #92400e;
+  --badge-state-bg: #2e1065;     --badge-state-fg: #c4b5fd;    --badge-state-bd: #6d28d9;
+  --badge-test-bg: #052e16;      --badge-test-fg: #86efac;     --badge-test-bd: #166534;
+  --badge-style-bg: #4c0519;     --badge-style-fg: #f9a8d4;    --badge-style-bd: #9d174d;
+  --badge-neutral-bg: #1f2937;   --badge-neutral-fg: #d1d5db;  --badge-neutral-bd: #374151;
 }
 
 html, body, #root {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, sans-serif;
+  font-feature-settings: "cv11", "ss01", "ss03";
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;

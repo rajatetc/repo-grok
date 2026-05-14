@@ -9,6 +9,7 @@ interface RepoStore {
   status: Status;
   error: string | null;
   messages: ChatMessage[];
+  geminiKey: string | null;
 
   setIngesting: () => void;
   setReady: (repoId: string, metadata: RepoMetadata) => void;
@@ -17,6 +18,7 @@ interface RepoStore {
 
   addMessage: (message: ChatMessage) => void;
   appendToLastMessage: (text: string) => void;
+  setGeminiKey: (key: string | null) => void;
 }
 
 export const useRepoStore = create<RepoStore>((set) => ({
@@ -25,15 +27,21 @@ export const useRepoStore = create<RepoStore>((set) => ({
   status: "idle",
   error: null,
   messages: [],
+  geminiKey: null,
 
   setIngesting: () => set({ status: "ingesting", error: null }),
-  setReady: (repoId, metadata) => set({ repoId, metadata, status: "ready", error: null }),
+  setReady: (repoId, metadata) =>
+    set((state) => ({
+      repoId,
+      metadata,
+      status: "ready",
+      error: null,
+      messages: state.repoId !== repoId ? [] : state.messages,
+    })),
   setError: (error) => set({ status: "error", error }),
   reset: () => set({ repoId: null, metadata: null, status: "idle", error: null, messages: [] }),
 
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
-
-  // Called repeatedly as SSE chunks arrive — appends to the last assistant message
   appendToLastMessage: (text) =>
     set((state) => {
       const messages = [...state.messages];
@@ -43,4 +51,6 @@ export const useRepoStore = create<RepoStore>((set) => ({
       }
       return { messages };
     }),
+
+  setGeminiKey: (key) => set({ geminiKey: key }),
 }));

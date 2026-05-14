@@ -44,15 +44,20 @@ interface TreeNodeProps {
   depth: number;
   openPaths: Set<string>;
   toggle: (path: string) => void;
+  baseUrl: string;
+  branch: string;
 }
 
-function TreeNode({ node, depth, openPaths, toggle }: TreeNodeProps) {
+function TreeNode({ node, depth, openPaths, toggle, baseUrl, branch }: TreeNodeProps) {
   const indent = { paddingLeft: depth * 12 };
 
   if (node.type === "file") {
     return (
       <div className={styles.file} style={indent}>
-        <span className={styles.fileIcon}>·</span> {node.name}
+        <span className={styles.fileIcon}>·</span>{" "}
+        <a href={`${baseUrl}/blob/${branch}/${node.path}`} target="_blank" rel="noreferrer" className={styles.fileLink}>
+          {node.name}
+        </a>
       </div>
     );
   }
@@ -62,12 +67,16 @@ function TreeNode({ node, depth, openPaths, toggle }: TreeNodeProps) {
     <div>
       {depth > 0 && (
         <div className={styles.dir} style={indent} onClick={() => toggle(node.path)}>
-          <span className={styles.dirIcon}>{isOpen ? "▾" : "▸"}</span> {node.name}/
+          <span className={styles.dirIcon}>{isOpen ? "▾" : "▸"}</span>{" "}
+          <a href={`${baseUrl}/tree/${branch}/${node.path}`} target="_blank" rel="noreferrer" className={styles.fileLink}
+             onClick={(e) => e.stopPropagation()}>
+            {node.name}/
+          </a>
         </div>
       )}
       {(isOpen || depth === 0) &&
         node.children?.map((child) => (
-          <TreeNode key={child.path} node={child} depth={depth + 1} openPaths={openPaths} toggle={toggle} />
+          <TreeNode key={child.path} node={child} depth={depth + 1} openPaths={openPaths} toggle={toggle} baseUrl={baseUrl} branch={branch} />
         ))}
     </div>
   );
@@ -88,10 +97,11 @@ function getTopLevelPaths(node: FolderNode): Set<string> {
 interface Props { metadata: RepoMetadata }
 
 export default function OverviewTab({ metadata }: Props) {
-  const { techStack, folderTree, fileCount, branch } = metadata;
+  const { techStack, folderTree, fileCount, branch, owner, repo } = metadata;
+  const baseUrl = `https://github.com/${owner}/${repo}`;
   const techGroups = groupTech(techStack);
   const hasTech = Object.keys(techGroups).length > 0;
-  const [openPaths, setOpenPaths] = useState(() => getTopLevelPaths(folderTree));
+  const [openPaths, setOpenPaths] = useState(() => new Set<string>());
 
   function toggle(path: string) {
     setOpenPaths((prev) => {
@@ -101,6 +111,18 @@ export default function OverviewTab({ metadata }: Props) {
       return next;
     });
   }
+
+  const { linesOfCode, dependencyCount, devDependencyCount, chunkBreakdown } = metadata;
+  const [structureOpen, setStructureOpen] = useState(true);
+
+  const codeUnits = chunkBreakdown
+    ? [
+        chunkBreakdown.component && `${chunkBreakdown.component} components`,
+        chunkBreakdown.hook       && `${chunkBreakdown.hook} hooks`,
+        chunkBreakdown.function   && `${chunkBreakdown.function} functions`,
+        chunkBreakdown.class      && `${chunkBreakdown.class} classes`,
+      ].filter(Boolean)
+    : [];
 
   return (
     <div className={styles.container}>
@@ -113,7 +135,33 @@ export default function OverviewTab({ metadata }: Props) {
           <span className={styles.statVal}>{branch}</span>
           <span className={styles.statLbl}>branch</span>
         </div>
+        {linesOfCode != null && (
+          <div className={styles.stat}>
+            <span className={styles.statVal}>{linesOfCode.toLocaleString()}</span>
+            <span className={styles.statLbl}>lines of code</span>
+          </div>
+        )}
+        {dependencyCount != null && (
+          <div className={styles.stat}>
+            <span className={styles.statVal}>{dependencyCount}</span>
+            <span className={styles.statLbl}>dependencies</span>
+          </div>
+        )}
+        {devDependencyCount != null && (
+          <div className={styles.stat}>
+            <span className={styles.statVal}>{devDependencyCount}</span>
+            <span className={styles.statLbl}>dev deps</span>
+          </div>
+        )}
       </div>
+
+      {codeUnits.length > 0 && (
+        <div className={styles.breakdown}>
+          {codeUnits.map((u) => (
+            <span key={u as string} className={styles.breakdownPill}>{u}</span>
+          ))}
+        </div>
+      )}
 
       {hasTech && (
         <div className={styles.techSection}>
@@ -131,10 +179,15 @@ export default function OverviewTab({ metadata }: Props) {
       )}
 
       <div className={styles.treeSection}>
-        <p className={styles.treeLabel}>Structure</p>
-        <div className={styles.tree}>
-          <TreeNode node={folderTree} depth={0} openPaths={openPaths} toggle={toggle} />
-        </div>
+        <button className={styles.treeToggle} onClick={() => setStructureOpen((v) => !v)}>
+          <span className={styles.treeLabel}>Structure</span>
+          <span className={styles.treeChevron}>{structureOpen ? "▾" : "▸"}</span>
+        </button>
+        {structureOpen && (
+          <div className={styles.tree}>
+            <TreeNode node={folderTree} depth={0} openPaths={openPaths} toggle={toggle} baseUrl={baseUrl} branch={branch} />
+          </div>
+        )}
       </div>
     </div>
   );

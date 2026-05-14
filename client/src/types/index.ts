@@ -15,6 +15,14 @@ export interface FolderNode {
   children?: FolderNode[];
 }
 
+export interface ChunkBreakdown {
+  component: number;
+  hook: number;
+  function: number;
+  class: number;
+  type: number;
+}
+
 export interface RepoMetadata {
   id: string;
   url: string;
@@ -26,16 +34,12 @@ export interface RepoMetadata {
   techStack: TechStack;
   folderTree: FolderNode;
   ingestedAt: string;
+  linesOfCode?: number;
+  dependencyCount?: number;
+  devDependencyCount?: number;
+  chunkBreakdown?: ChunkBreakdown;
 }
 
-export interface ChangeGuideResult {
-  summary: string;
-  filesToModify: Array<{
-    filePath: string;
-    reason: string;
-    suggestion: string;
-  }>;
-}
 
 export interface ChatMessage {
   id: string;
