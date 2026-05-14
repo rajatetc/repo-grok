@@ -15,6 +15,7 @@
 - [More languages](#more-languages)
 - [Vector database at scale](#vector-database-when-scale-demands-it)
 - [Visualizations](#visualizations)
+- [Serialize ingests per process](#serialize-ingests-per-process-defense-against-oom)
 
 ---
 
@@ -155,3 +156,24 @@ Potential approaches that would be more reliable:
 - **Import graph:** parse `import` statements from existing AST chunks, build a directed file dependency graph, render with React Flow (no LLM needed — deterministic)
 - **Component tree:** detect parent → child JSX relationships from the chunk data
 - **On-demand diagrams:** let the user ask for a diagram in chat rather than generating one automatically — moves the unreliability problem to an explicit user action
+
+---
+
+## Serialize ingests per process (defense against OOM)
+
+**Incident:** 2026-05-14, ingesting `mui/material-ui` OOM-killed the Node process on Render. Production logs showed 3 fetches for the same repo within 4 seconds, then the process restarted with no error — the kernel had killed it for exceeding the 512MB container ceiling.
+
+**Immediate trigger:** the client-side cancel-button form-resubmit bug (now fixed in `0c10b3b`) re-submitted the ingest form on every Cancel click, fanning out 3 parallel ingests of a massive monorepo. Each ingest's peak memory stacked and overflowed the box.
+
+**The gap that remains:** even with the client bug gone, the server has **no guard against concurrent ingests on the same process**. Multiple tabs, retry storms, or future client bugs could trigger the same failure mode. The existing memory tuning (`EMBED_BATCH_SIZE=16`, `--max-old-space-size=400`, `MAX_TOTAL_CHUNKS=3000`, 150 MB / 500 KB byte caps, LRU=10) is all sized for **one ingest at a time**. Peak per-ingest is ~350 MB; two in parallel doesn't fit in 512 MB.
+
+**Proposed fix when this is worth building:**
+1. New `server/src/services/ingestQueue.ts` with a promise-chain lock (`withIngestLock`) so only one ingest runs at a time per process. Tracks queue position.
+2. SSE `progress` event with `stage: "queued", position: N` so the client can show a "waiting in queue — N ahead of you" state instead of looking frozen.
+3. 15s heartbeat (`res.write(":\n\n")`) while queued so Render's proxy doesn't idle-timeout the SSE connection during long waits.
+4. `req.on("close")` short-circuit so a client that closed during the queue doesn't waste a slot running its ingest when its turn arrives.
+5. Upfront `MAX_SOURCE_FILES = 1500` reject after `fetchRepo` — handles the pathological-large-repo case (`mui/material-ui` has ~5K source files; popular ingest targets like redux/axios/zod/immer are all under 500).
+
+**Trigger to implement:** another OOM in production logs, or analytics showing concurrent ingest attempts becoming common (e.g. >5% of requests overlap an existing in-flight ingest).
+
+**See also:** [Render free tier memory tuning](./NOTES.md#render-free-tier-memory-tuning) — explains the per-ingest peak and the existing knobs we used to fit one ingest in 512 MB.
