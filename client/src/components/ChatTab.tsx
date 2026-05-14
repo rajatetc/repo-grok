@@ -20,11 +20,23 @@ export default function ChatTab({ repoId }: Props) {
   const { messages, addMessage, appendToLastMessage } = useRepoStore();
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const lastUserMsgIdRef = useRef<string | null>(null);
 
+  // On a new user message, anchor it at the top of the chat scroll area so
+  // the answer streams into the visible space below it (ChatGPT-style).
+  // Skip the constant scroll-during-streaming that pinned the viewport to
+  // the bottom and made long answers unreadable.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role !== "user") continue;
+      if (m.id !== lastUserMsgIdRef.current) {
+        lastUserMsgIdRef.current = m.id;
+        document.getElementById(`msg-${m.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      break;
+    }
   }, [messages]);
 
   useEffect(() => () => { cleanupRef.current?.(); }, []);
@@ -88,7 +100,11 @@ export default function ChatTab({ repoId }: Props) {
           </div>
         )}
         {messages.map((msg, i) => (
-          <div key={msg.id} className={`${styles.row} ${msg.role === "user" ? styles.rowUser : styles.rowAssistant}`}>
+          <div
+            key={msg.id}
+            id={`msg-${msg.id}`}
+            className={`${styles.row} ${msg.role === "user" ? styles.rowUser : styles.rowAssistant}`}
+          >
             {msg.role === "user" ? (
               <div className={styles.userBubble}>{msg.content}</div>
             ) : (
@@ -101,7 +117,6 @@ export default function ChatTab({ repoId }: Props) {
             )}
           </div>
         ))}
-        <div ref={bottomRef} />
       </div>
 
       <form className={styles.form} onSubmit={handleSubmit}>
