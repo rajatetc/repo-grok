@@ -31,6 +31,7 @@ import { embedChunks, embedQuery, loadEmbeddingModel } from "./services/embeddin
 import { LRUCache } from "lru-cache";
 import { storeChunks, search, hasRepo } from "./services/vectorStore.js";
 import { streamAnswer, type HistoryMessage } from "./services/llm.js";
+import { loadSeeds } from "./services/seeds.js";
 import { normalizeUrl } from "./utils/normalizeUrl.js";
 import type { RepoMetadata } from "./types/index.js";
 
@@ -296,7 +297,13 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: clientError(err, "Internal server error") });
 });
 
-loadEmbeddingModel().catch((err) => console.warn("Embedding model failed to load:", err));
+loadEmbeddingModel().catch((err) => console.warn("Embedding model check failed:", err));
+
+loadSeeds().then(({ urlMap, metadataMap }) => {
+  for (const [url, id] of urlMap) urlCache.set(url, id);
+  for (const [id, meta] of metadataMap) repoMetadataStore.set(id, meta);
+  if (urlMap.size > 0) console.log(`${urlMap.size} seed(s) ready`);
+}).catch((err) => console.warn("Seed loading failed:", err));
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

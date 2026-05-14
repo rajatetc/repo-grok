@@ -1,12 +1,18 @@
 /**
- * Generates seed files for the 3 example repos.
- * Run once: npm run prebake
- * Then commit server/seeds/ — server loads them on startup with zero API calls.
+ * Generates seed files for the example repos.
  *
- * Embeddings are computed locally (no Gemini quota used).
- * Only needs GEMINI_API_KEY if you add LLM-based steps here in future.
+ * Why this exists: the deployed server uses Gemini's free-tier embedding
+ * model, which is rate-limited. Re-indexing the example repos on every
+ * cold boot would burn quota and slow first-visit UX. Instead we run this
+ * script offline once, commit the resulting JSONs, and the server loads
+ * them at startup with zero API calls.
+ *
+ * Usage:
+ *   npm run prebake              # all repos missing a seed file
+ *   npm run prebake -- redux     # force just one (overwrites)
  */
 import "dotenv/config";
+import { randomUUID } from "node:crypto";
 import { mkdir, writeFile, access } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +31,13 @@ const ALL_EXAMPLES = [
   { owner: "axios",     repo: "axios"   },
 ];
 
+const MAX_TOTAL_CHUNKS = 3000;
+const TYPE_PRIORITY: Record<string, number> = { component: 0, hook: 1, function: 2, class: 3, type: 4 };
+
+// Inter-repo pause so the Gemini RPM window has time to relax between repos.
+const INTER_REPO_DELAY_MS = 60_000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function alreadySeeded(owner: string, repo: string): Promise<boolean> {
   try {
@@ -37,17 +50,45 @@ async function alreadySeeded(owner: string, repo: string): Promise<boolean> {
 
 async function prebakeOne(owner: string, repo: string): Promise<void> {
   const url = `https://github.com/${owner}/${repo}`;
-  const repoId = `seed-${owner}-${repo}`;
+  const repoId = randomUUID();
   console.log(`\n▶ ${owner}/${repo}`);
+  const startedAt = Date.now();
 
   const { files, branch, folderTree } = await fetchRepo(url);
+  const sourceFiles = files.filter((f) => !f.path.endsWith("package.json"));
   console.log(`  Fetched ${files.length} files`);
 
-  const techStack = detectTechStack(files);
   const chunks = chunkFiles(files);
-  console.log(`  Parsed → ${chunks.length} chunks`);
+  const techStack = detectTechStack(files);
 
-  const embeddedChunks = await embedChunks(chunks);
+  const sorted = [...chunks].sort((a, b) => (TYPE_PRIORITY[a.type] ?? 5) - (TYPE_PRIORITY[b.type] ?? 5));
+  const truncated = sorted.length > MAX_TOTAL_CHUNKS;
+  const chunksToEmbed = truncated ? sorted.slice(0, MAX_TOTAL_CHUNKS) : sorted;
+  console.log(`  Parsed → ${chunks.length} chunks${truncated ? ` (capped to ${MAX_TOTAL_CHUNKS})` : ""}`);
+
+  const embeddedChunks = await embedChunks(chunksToEmbed);
+
+  const linesOfCode = sourceFiles.reduce((n, f) => n + f.content.split("\n").length, 0);
+
+  let dependencyCount = 0;
+  let devDependencyCount = 0;
+  const pkgFile = files.find((f) => f.path === "package.json" || /^[^/]+\/package\.json$/.test(f.path));
+  if (pkgFile) {
+    try {
+      const pkg = JSON.parse(pkgFile.content);
+      dependencyCount    = Object.keys(pkg.dependencies    ?? {}).length;
+      devDependencyCount = Object.keys(pkg.devDependencies ?? {}).length;
+    } catch { /* ignore malformed package.json */ }
+  }
+
+  const chunkBreakdown = embeddedChunks.reduce(
+    (acc, c) => {
+      const key = c.type as keyof typeof acc;
+      if (key in acc) acc[key]++;
+      return acc;
+    },
+    { component: 0, hook: 0, function: 0, class: 0, type: 0 }
+  );
 
   const metadata: RepoMetadata = {
     id: repoId,
@@ -55,22 +96,31 @@ async function prebakeOne(owner: string, repo: string): Promise<void> {
     owner,
     repo,
     branch,
-    fileCount: files.length,
+    fileCount: sourceFiles.length,
     totalChunks: embeddedChunks.length,
     techStack,
     folderTree,
     ingestedAt: new Date().toISOString(),
+    linesOfCode,
+    dependencyCount,
+    devDependencyCount,
+    chunkBreakdown,
   };
 
   const outPath = join(SEEDS_DIR, `${owner}-${repo}.json`);
   await writeFile(outPath, JSON.stringify({ repoId, url, metadata, chunks: embeddedChunks }), "utf-8");
-  console.log(`  ✓ Saved seeds/${owner}-${repo}.json`);
+  const elapsedMs = Date.now() - startedAt;
+  console.log(`  ✓ Saved seeds/${owner}-${repo}.json (${(elapsedMs / 1000).toFixed(1)}s, ${embeddedChunks.length} chunks)`);
 }
 
 async function main() {
+  if (!process.env.GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY not set.");
+    process.exit(1);
+  }
+
   await mkdir(SEEDS_DIR, { recursive: true });
 
-  // Allow filtering by repo name via CLI args: npm run prebake -- immer zustand
   const filter = process.argv.slice(2).map((s) => s.toLowerCase());
   const targets = filter.length
     ? ALL_EXAMPLES.filter((e) => filter.includes(e.repo.toLowerCase()))
@@ -81,18 +131,24 @@ async function main() {
     process.exit(1);
   }
 
-  let queued = 0;
+  const forceAll = filter.length > 0; // explicit names = always overwrite
+  let processed = 0;
+
   for (const { owner, repo } of targets) {
-    if (await alreadySeeded(owner, repo)) {
-      console.log(`Skipping ${owner}/${repo} — seed already exists`);
+    if (!forceAll && (await alreadySeeded(owner, repo))) {
+      console.log(`Skipping ${owner}/${repo} — seed already exists (pass repo name to force)`);
       continue;
     }
-    queued++;
+    if (processed > 0) {
+      console.log(`\nWaiting ${INTER_REPO_DELAY_MS / 1000}s for RPM window…`);
+      await sleep(INTER_REPO_DELAY_MS);
+    }
     await prebakeOne(owner, repo);
+    processed++;
   }
 
-  if (queued === 0) {
-    console.log("\nAll selected repos are already seeded. Nothing to do.");
+  if (processed === 0) {
+    console.log("\nAll selected repos already seeded.");
   } else {
     console.log("\n✓ Done. Commit the server/seeds/ directory.");
   }
