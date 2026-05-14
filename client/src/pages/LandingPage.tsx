@@ -40,8 +40,9 @@ function stepClassName(stepId: IngestionStage, stage: IngestionStage, styles: Re
   if (stage === "idle") return styles.stepIdle;
   const stepIdx = STAGE_ORDER.indexOf(stepId);
   const stageIdx = STAGE_ORDER.indexOf(stage);
-  if (stepIdx <= stageIdx) return styles.stepVisible;
-  return styles.stepDim;
+  if (stepIdx === stageIdx) return styles.stepActive;   // currently working — pulses
+  if (stepIdx < stageIdx) return styles.stepVisible;    // completed
+  return styles.stepDim;                                  // upcoming
 }
 
 export default function LandingPage() {

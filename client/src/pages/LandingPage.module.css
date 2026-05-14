@@ -166,10 +166,23 @@
 .stepIdle   { color: var(--text-muted); }
 .stepIdle .stepIcon { color: var(--icon-blue); }
 
-/* active during loading */
+/* completed during loading */
 .stepVisible {
   color: var(--icon-blue);
   background: var(--accent-dim);
+}
+
+/* currently working — same look as visible but with a pulsing icon so the
+   user can tell it's still running during slow phases (fetch, embed) */
+.stepActive {
+  color: var(--icon-blue);
+  background: var(--accent-dim);
+}
+.stepActive .stepIcon { animation: stepPulse 1.4s ease-in-out infinite; }
+
+@keyframes stepPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
 }
 
 /* future steps during loading — muted via color so tooltip stays opaque */
