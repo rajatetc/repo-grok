@@ -1,6 +1,7 @@
 import { useState, useRef, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRepoStore } from "../store/useRepoStore";
+import { useRecentRepos } from "../store/useRecentRepos";
 import { ingestRepoStream } from "../api";
 import { useIngestionProgress, type IngestionStage } from "../hooks/useIngestionProgress";
 import ThemeToggle from "../components/ThemeToggle";
@@ -45,6 +46,7 @@ function stepClassName(stepId: IngestionStage, stage: IngestionStage, styles: Re
 export default function LandingPage() {
   const navigate = useNavigate();
   const { setIngesting, setReady, setError, setChunkWarning, status, error } = useRepoStore();
+  const { recents, addRecent } = useRecentRepos();
   const [url, setUrl] = useState("");
   const isLoading = status === "ingesting";
   const { percent, stage, onProgress, onDone, reset } = useIngestionProgress();
@@ -62,6 +64,7 @@ export default function LandingPage() {
       (repoId, metadata) => {
         onDone();
         setReady(repoId, metadata);
+        addRecent({ owner: metadata.owner, repo: metadata.repo, url: url.trim() });
         setTimeout(() => navigate(`/repo/${repoId}`), 300);
       },
       (err) => setError(err),
@@ -140,6 +143,24 @@ export default function LandingPage() {
           ))}
         </div>
       </div>
+
+      {recents.length > 0 && (
+        <div className={styles.examples}>
+          <p className={styles.examplesLabel}>Recently explored</p>
+          <div className={styles.chips}>
+            {recents.map((r) => (
+              <button
+                key={r.url}
+                className={styles.chip}
+                disabled={isLoading}
+                onClick={() => setUrl(r.url)}
+              >
+                {r.owner}/{r.repo}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>

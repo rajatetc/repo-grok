@@ -26,11 +26,33 @@
   font-size: 14px;
 }
 
-.suggestions {
-  margin-top: 8px;
-  font-size: 12px;
-  line-height: 2;
+.suggestionChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.suggestionChip {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.suggestionChip:hover:not(:disabled) {
+  border-color: #9ca3af;
+  color: var(--text);
+}
+
+.suggestionChip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .row {

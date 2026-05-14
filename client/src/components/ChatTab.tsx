@@ -23,6 +23,13 @@ export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
 
+  const SUGGESTIONS = [
+    "How is the code structured?",
+    "Walk me through the core flow",
+    "What are the main exports?",
+    "How are errors handled?",
+  ];
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -41,12 +48,8 @@ export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
     setStreaming(false);
   }
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const query = input.trim();
+  function submitQuery(query: string) {
     if (!query || streaming) return;
-
-    // Snapshot completed turns before adding the new messages
     const history = messages
       .filter((m) => m.content.trim().length > 0)
       .slice(-10)
@@ -71,15 +74,30 @@ export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
     );
   }
 
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    const query = input.trim();
+    submitQuery(query);
+  }
+
   return (
     <div className={styles.container}>
       <div className={styles.messages}>
         {messages.length === 0 && (
           <div className={styles.empty}>
             <p>Ask anything about this codebase.</p>
-            <p className={styles.suggestions}>
-              "How does the main logic work?" · "What patterns are used?" · "How is error handling done?"
-            </p>
+            <div className={styles.suggestionChips}>
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  className={styles.suggestionChip}
+                  onClick={() => submitQuery(s)}
+                  disabled={streaming}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((msg, i) => (
