@@ -2,13 +2,16 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { CodeChunk } from "../types/index.js";
 
 // gemini-embedding-001 is the current free-tier embedding model.
-// It exposes embedContent (single text) but NOT batchEmbedContents,
-// so we parallelize within each batch and pace batches with a delay.
-// Conservative numbers — Google's free tier throttles bursts, not just
-// the 1500 RPM average. 8 parallel @ 1.5s pacing = ~5 RPS, well under limits.
+// It exposes embedContent (single text) but NOT batchEmbedContents.
+//
+// Empirical free-tier rate limit is *much* lower than the 1500 RPM
+// docs imply. 8 parallel calls (~320 RPM effective) were rejected
+// instantly even with a brand-new API key. 3 parallel @ 2s pacing
+// keeps us around 90 RPM effective — safely under the real ceiling
+// while still giving runtime ingestion enough throughput for usable UX.
 const MODEL = "models/gemini-embedding-001";
-const BATCH_SIZE = 8;
-const BATCH_DELAY_MS = 1500;
+const BATCH_SIZE = 3;
+const BATCH_DELAY_MS = 2000;
 const MAX_RETRIES = 4;
 
 function getModel(apiKey?: string) {
@@ -41,9 +44,10 @@ async function embedOne(
     const msg = err instanceof Error ? err.message : String(err);
     const isRateLimit = msg.includes("429") || msg.toLowerCase().includes("rate") || msg.toLowerCase().includes("quota");
     if (isRateLimit && attempt < MAX_RETRIES) {
-      // Exponential backoff: 2s, 4s, 8s, 16s — Google's retryDelay hint
-      // is typically 1s but bursts often need more recovery time than that.
-      const backoffMs = 2000 * Math.pow(2, attempt);
+      // Exponential backoff: 3s, 6s, 12s, 24s. The free tier's rate
+      // window is on the order of seconds, so shorter waits often hit
+      // the same throttle immediately.
+      const backoffMs = 3000 * Math.pow(2, attempt);
       console.warn(`Embed rate-limited (attempt ${attempt + 1}/${MAX_RETRIES}), backing off ${backoffMs}ms`);
       await sleep(backoffMs);
       return embedOne(model, text, attempt + 1);
@@ -63,7 +67,7 @@ export async function embedChunks(
   chunks: CodeChunk[],
   onProgress?: (done: number, total: number) => void
 ): Promise<CodeChunk[]> {
-  console.log(`Embedding ${chunks.length} chunks via Gemini…`);
+  console.log(`Embedding ${chunks.length} chunks via Gemini (~90 RPM)…`);
   const model = getModel();
 
   for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
@@ -77,11 +81,10 @@ export async function embedChunks(
 
     const done = Math.min(i + BATCH_SIZE, chunks.length);
     onProgress?.(done, chunks.length);
-    if (done % 100 === 0 || done === chunks.length) {
+    if (done % 30 === 0 || done === chunks.length) {
       console.log(`  ${done}/${chunks.length}`);
     }
 
-    // Pace batches so we stay well under the 1500 RPM free-tier limit.
     if (i + BATCH_SIZE < chunks.length) await sleep(BATCH_DELAY_MS);
   }
 
