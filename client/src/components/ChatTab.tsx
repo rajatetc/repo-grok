@@ -17,7 +17,7 @@ const SUGGESTIONS = [
 ];
 
 export default function ChatTab({ repoId }: Props) {
-  const { messages, addMessage, appendToLastMessage } = useRepoStore();
+  const { messages, addMessage, appendToLastMessage, setSourcesOnLastMessage, metadata } = useRepoStore();
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -70,7 +70,14 @@ export default function ChatTab({ repoId }: Props) {
         appendToLastMessage(`\n\n_${err}_`);
         setStreaming(false);
       },
+      (sources) => setSourcesOnLastMessage(sources),
     );
+  }
+
+  function blobUrl(filePath: string, startLine: number, endLine: number): string {
+    if (!metadata) return "#";
+    const { owner, repo, branch } = metadata;
+    return `https://github.com/${owner}/${repo}/blob/${branch}/${filePath}#L${startLine}-L${endLine}`;
   }
 
   function handleSubmit(e: FormEvent) {
@@ -113,6 +120,23 @@ export default function ChatTab({ repoId }: Props) {
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                 </div>
                 {streaming && i === messages.length - 1 && <span className={styles.cursor} />}
+                {msg.sources && msg.sources.length > 0 && (
+                  <div className={styles.sources}>
+                    <span className={styles.sourcesLabel}>Sources</span>
+                    {msg.sources.map((s) => (
+                      <a
+                        key={s.filePath}
+                        href={blobUrl(s.filePath, s.startLine, s.endLine)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={styles.sourceChip}
+                        title={`${s.filePath} (lines ${s.startLine}-${s.endLine})`}
+                      >
+                        {s.filePath.split("/").pop()}
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

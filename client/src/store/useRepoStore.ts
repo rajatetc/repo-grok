@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { RepoMetadata, ChatMessage } from "../types";
+import type { RepoMetadata, ChatMessage, Source } from "../types";
 
 type Status = "idle" | "ingesting" | "ready" | "error";
 
@@ -19,6 +19,7 @@ interface RepoStore {
 
   addMessage: (message: ChatMessage) => void;
   appendToLastMessage: (text: string) => void;
+  setSourcesOnLastMessage: (sources: Source[]) => void;
 }
 
 export const useRepoStore = create<RepoStore>((set) => ({
@@ -49,6 +50,16 @@ export const useRepoStore = create<RepoStore>((set) => ({
       const last = messages[messages.length - 1];
       if (last?.role === "assistant") {
         messages[messages.length - 1] = { ...last, content: last.content + text };
+      }
+      return { messages };
+    }),
+
+  setSourcesOnLastMessage: (sources) =>
+    set((state) => {
+      const messages = [...state.messages];
+      const last = messages[messages.length - 1];
+      if (last?.role === "assistant") {
+        messages[messages.length - 1] = { ...last, sources };
       }
       return { messages };
     }),

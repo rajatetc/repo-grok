@@ -1,4 +1,4 @@
-import type { RepoMetadata } from "../types";
+import type { RepoMetadata, Source } from "../types";
 import { API_BASE } from "../constants";
 
 export type IngestProgress =
@@ -85,6 +85,7 @@ export function streamQuery(
   onChunk: (text: string) => void,
   onDone: () => void,
   onError: (msg: string) => void,
+  onSources?: (sources: Source[]) => void,
 ): () => void {
   const controller = new AbortController();
 
@@ -118,6 +119,11 @@ export function streamQuery(
           const raw = line.slice(6);
           if (pendingEvent === "done") { onDone(); return; }
           if (pendingEvent === "error") { onError(raw || "Stream error from server."); return; }
+          if (pendingEvent === "sources") {
+            try { onSources?.(JSON.parse(raw)); } catch { /* ignore malformed */ }
+            pendingEvent = "";
+            continue;
+          }
           onChunk(JSON.parse(raw));
           pendingEvent = "";
         } else if (line === "") {

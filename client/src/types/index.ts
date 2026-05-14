@@ -41,8 +41,17 @@ export interface RepoMetadata {
 }
 
 
+export interface Source {
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  type: string;
+  name?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  sources?: Source[];
 }
