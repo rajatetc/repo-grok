@@ -55,7 +55,9 @@ if (!process.env.CLIENT_URL) {
 app.use(cors({ origin: clientOrigin, allowedHeaders: ["Content-Type", "x-gemini-key"] }));
 app.use(express.json({ limit: "100kb" }));
 
-const MAX_REPOS = 5;
+// With Gemini embeddings replacing local WASM (~250MB freed), we can comfortably
+// cache more repos. 20 keeps headroom on 512MB Render with prebaked seeds preloaded.
+const MAX_REPOS = 20;
 
 // --- Repo metadata store ---
 const repoMetadataStore = new LRUCache<string, RepoMetadata>({ max: MAX_REPOS });
@@ -262,7 +264,7 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
   const userApiKey = req.headers["x-gemini-key"] as string | undefined;
 
   try {
-    const queryVector = await embedQuery(query);
+    const queryVector = await embedQuery(query, userApiKey || undefined);
     const results = search(repoId, queryVector);
 
     for await (const textChunk of streamAnswer(query, results, metadata, userApiKey || undefined, safeHistory)) {

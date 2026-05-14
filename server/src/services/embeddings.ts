@@ -1,33 +1,19 @@
-import { pipeline, type FeatureExtractionPipeline } from "@xenova/transformers";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { CodeChunk } from "../types/index.js";
 
-// all-MiniLM-L6-v2: 23MB, 384-dim vectors, good semantic similarity.
-// Downloads once on first server boot and stays in memory — no API calls ever.
-const MODEL = "Xenova/all-MiniLM-L6-v2";
-const HIDDEN_SIZE = 384;
-// Batch size kept low to fit inside Render free tier's 512MB container.
-// ONNX inference allocates tensors proportional to batch * tokens * hidden_size,
-// which at batch=64 spiked over 200MB and OOM'd. 16 is the safe ceiling.
-const EMBED_BATCH_SIZE = 16;
+// gemini-embedding-001 is the current free-tier embedding model.
+// It exposes embedContent (single text) but NOT batchEmbedContents,
+// so we parallelize within each batch and pace batches with a small delay.
+const MODEL = "models/gemini-embedding-001";
+const BATCH_SIZE = 20;
+const BATCH_DELAY_MS = 500;
+const MAX_RETRIES = 3;
 
-let modelPromise: ReturnType<typeof pipeline> | null = null;
-
-export function loadEmbeddingModel(): ReturnType<typeof pipeline> {
-  if (!modelPromise) {
-    console.log("Loading embedding model (first run may download ~23MB)…");
-    modelPromise = pipeline("feature-extraction", MODEL).then((m) => {
-      console.log("Embedding model ready.");
-      return m;
-    }).catch((err) => {
-      modelPromise = null; // reset so next call retries
-      throw err;
-    });
-  }
-  return modelPromise;
-}
-
-async function getExtractor(): Promise<FeatureExtractionPipeline> {
-  return loadEmbeddingModel() as Promise<FeatureExtractionPipeline>;
+function getModel(apiKey?: string) {
+  const key = apiKey ?? process.env.GEMINI_API_KEY;
+  if (!key) throw new Error("GEMINI_API_KEY not set");
+  const genAI = new GoogleGenerativeAI(key);
+  return genAI.getGenerativeModel({ model: MODEL });
 }
 
 function chunkToText(chunk: CodeChunk): string {
@@ -39,39 +25,66 @@ function chunkToText(chunk: CodeChunk): string {
   ].filter(Boolean).join("\n");
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function embedOne(
+  model: ReturnType<typeof getModel>,
+  text: string,
+  attempt = 0
+): Promise<number[]> {
+  try {
+    const result = await model.embedContent(text);
+    return result.embedding.values;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const isRateLimit = msg.includes("429") || msg.toLowerCase().includes("rate") || msg.toLowerCase().includes("quota");
+    if (isRateLimit && attempt < MAX_RETRIES) {
+      const backoffMs = 1000 * Math.pow(2, attempt);
+      console.warn(`Embed rate-limited (attempt ${attempt + 1}/${MAX_RETRIES}), backing off ${backoffMs}ms`);
+      await sleep(backoffMs);
+      return embedOne(model, text, attempt + 1);
+    }
+    throw err;
+  }
+}
+
+// Loader retained for API compatibility with index.ts — Gemini has no model to warm.
+export async function loadEmbeddingModel(): Promise<void> {
+  if (!process.env.GEMINI_API_KEY) {
+    console.warn("WARN: GEMINI_API_KEY not set — embedding requests will fail.");
+  }
+}
+
 export async function embedChunks(
   chunks: CodeChunk[],
   onProgress?: (done: number, total: number) => void
 ): Promise<CodeChunk[]> {
-  console.log(`Embedding ${chunks.length} chunks…`);
-  const model = await getExtractor();
+  console.log(`Embedding ${chunks.length} chunks via Gemini…`);
+  const model = getModel();
 
-  for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
-    const batch = chunks.slice(i, i + EMBED_BATCH_SIZE);
+  for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+    const batch = chunks.slice(i, i + BATCH_SIZE);
     const texts = batch.map(chunkToText);
 
-    const output = await (model as FeatureExtractionPipeline)(texts, {
-      pooling: "mean",
-      normalize: true,
-    }) as { data: Float32Array };
-
+    const embeddings = await Promise.all(texts.map((t) => embedOne(model, t)));
     for (let j = 0; j < batch.length; j++) {
-      const start = j * HIDDEN_SIZE;
-      chunks[i + j].embedding = Array.from(output.data.subarray(start, start + HIDDEN_SIZE));
+      chunks[i + j].embedding = embeddings[j];
     }
 
-    const done = Math.min(i + EMBED_BATCH_SIZE, chunks.length);
+    const done = Math.min(i + BATCH_SIZE, chunks.length);
     onProgress?.(done, chunks.length);
-    if (done % 320 === 0 || done === chunks.length) {
+    if (done % 100 === 0 || done === chunks.length) {
       console.log(`  ${done}/${chunks.length}`);
     }
+
+    // Pace batches so we stay well under the 1500 RPM free-tier limit.
+    if (i + BATCH_SIZE < chunks.length) await sleep(BATCH_DELAY_MS);
   }
 
   return chunks;
 }
 
-export async function embedQuery(query: string): Promise<number[]> {
-  const model = await getExtractor();
-  const output = await model(query, { pooling: "mean", normalize: true }) as { data: Float32Array };
-  return Array.from(output.data);
+export async function embedQuery(query: string, apiKey?: string): Promise<number[]> {
+  const model = getModel(apiKey);
+  return embedOne(model, query);
 }
