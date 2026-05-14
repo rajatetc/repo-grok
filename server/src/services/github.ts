@@ -10,18 +10,16 @@ const ALLOWED_EXTENSIONS = new Set([
 ]);
 const MAX_FILE_SIZE = 500 * 1024; // 500KB
 
-const IGNORED_PATHS = [
-  "node_modules/",
-  "dist/",
-  "build/",
-  ".next/",
-  "package-lock.json",
-  "yarn.lock",
-  "pnpm-lock.yaml",
-  ".min.",
-  "/fixtures/",
-  "/website/",
-];
+// Directory segments that should never be traversed
+const IGNORED_DIRS = new Set([
+  "node_modules", "dist", "build", ".next", "out", "coverage",
+  "__mocks__", "fixtures", "__fixtures__", "website",
+]);
+
+// Exact filenames to skip
+const IGNORED_FILES = new Set([
+  "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+]);
 
 export function parseGitHubUrl(url: string): {
   owner: string;
@@ -78,8 +76,10 @@ function getExtension(filePath: string): string {
 
 function isAllowedFile(path: string): boolean {
   const segments = path.split("/");
-  if (IGNORED_PATHS.some((p) => segments.includes(p))) return false;
-  const filename = path.split("/").pop() ?? "";
+  const filename = segments[segments.length - 1];
+  if (segments.slice(0, -1).some(s => IGNORED_DIRS.has(s))) return false;
+  if (IGNORED_FILES.has(filename)) return false;
+  if (filename.includes(".min.")) return false;
   if (filename === "package.json") return true;
   return ALLOWED_EXTENSIONS.has(getExtension(path));
 }

@@ -19,6 +19,7 @@ const FRAMEWORKS: [string, string][] = [
 const STATE: [string, string][] = [
   ["@reduxjs/toolkit",   "Redux Toolkit"],
   ["redux",              "Redux"],
+  ["react-redux",        "Redux"],
   ["zustand",            "Zustand"],
   ["jotai",              "Jotai"],
   ["recoil",             "Recoil"],

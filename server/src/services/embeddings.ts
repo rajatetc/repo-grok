@@ -5,7 +5,7 @@ import type { CodeChunk } from "../types/index.js";
 // Downloads once on first run and caches locally — no API calls ever.
 const MODEL = "Xenova/all-MiniLM-L6-v2";
 const HIDDEN_SIZE = 384;
-const EMBED_BATCH_SIZE = 32;
+const EMBED_BATCH_SIZE = 64;
 
 let modelPromise: ReturnType<typeof pipeline> | null = null;
 
