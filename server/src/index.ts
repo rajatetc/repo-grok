@@ -138,6 +138,7 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
     }
 
     const techStack = detectTechStack(files);
+    emit("progress", { stage: "chunk" });
     const chunks = chunkFiles(files);
     emit("progress", { stage: "chunk", total: chunks.length });
 
@@ -265,6 +266,9 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
   });
 
   const userApiKey = req.headers["x-gemini-key"] as string | undefined;
+  if (userApiKey && !/^AIza[0-9A-Za-z_-]{35}$/.test(userApiKey)) {
+    return res.status(400).json({ error: "Invalid Gemini API key format." });
+  }
 
   try {
     const queryVector = await embedQuery(query);
@@ -272,10 +276,7 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
 
     for await (const textChunk of streamAnswer(query, results, metadata, userApiKey || undefined, safeHistory)) {
       if (clientClosed) return;
-      // SSE frame format: `data: <payload>\n\n`. Both \n and \r terminate a
-      // frame, so encode both — the client decodes on receive.
-      const safe = textChunk.replace(/\r/g, "\\r").replace(/\n/g, "\\n");
-      res.write(`data: ${safe}\n\n`);
+      res.write(`data: ${JSON.stringify(textChunk)}\n\n`);
     }
 
     if (!clientClosed) {
@@ -305,10 +306,10 @@ loadSeeds().then(({ urlMap, metadataMap }) => {
   for (const [url, id] of urlMap) urlCache.set(url, id);
   for (const [id, meta] of metadataMap) repoMetadataStore.set(id, meta);
   if (urlMap.size > 0) console.log(`${urlMap.size} seed(s) ready`);
-}).catch((err) => console.warn("Seed loading failed:", err));
-
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+}).catch((err) => console.warn("Seed loading failed:", err)).finally(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 });
 
 export default app;
