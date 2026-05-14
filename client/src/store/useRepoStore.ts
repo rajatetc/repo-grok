@@ -18,6 +18,7 @@ interface RepoStore {
 
   addMessage: (message: ChatMessage) => void;
   appendToLastMessage: (text: string) => void;
+  setLastMessageSources: (sources: string[]) => void;
   setGeminiKey: (key: string | null) => void;
 }
 
@@ -48,6 +49,16 @@ export const useRepoStore = create<RepoStore>((set) => ({
       const last = messages[messages.length - 1];
       if (last?.role === "assistant") {
         messages[messages.length - 1] = { ...last, content: last.content + text };
+      }
+      return { messages };
+    }),
+
+  setLastMessageSources: (sources) =>
+    set((state) => {
+      const messages = [...state.messages];
+      const last = messages[messages.length - 1];
+      if (last?.role === "assistant") {
+        messages[messages.length - 1] = { ...last, sources };
       }
       return { messages };
     }),

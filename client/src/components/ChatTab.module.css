@@ -157,6 +157,32 @@
 .button:hover:not(:disabled) { background: var(--btn-bg-hover); }
 .button:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* ── Source citations ───────────────────────── */
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.sourceChip {
+  font-size: 11px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  background: var(--accent-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  color: var(--text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.sourceChip:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
 /* ── Rate-limit key nudge ───────────────────── */
 .keyNudge {
   display: flex;

@@ -1,28 +1,24 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
+import type { IngestProgress } from "../api";
 
-export function useIngestionProgress(isLoading: boolean): number {
-  const [progress, setProgress] = useState(0);
-  const started = useRef(false);
+type State = { percent: number; message: string };
 
-  useEffect(() => {
-    if (!isLoading) {
-      if (started.current) {
-        started.current = false;
-        setProgress(100);
-        const t = setTimeout(() => setProgress(0), 600);
-        return () => clearTimeout(t);
-      }
-      return;
+export function useIngestionProgress() {
+  const [state, setState] = useState<State>({ percent: 0, message: "" });
+
+  const onProgress = useCallback((p: IngestProgress) => {
+    if (p.stage === "fetch") {
+      setState({ percent: 15, message: "Fetching repository…" });
+    } else if (p.stage === "chunk") {
+      setState({ percent: 30, message: `Parsed ${p.total.toLocaleString()} chunks…` });
+    } else if (p.stage === "embed") {
+      const pct = 30 + Math.round((p.done / p.total) * 60);
+      setState({ percent: pct, message: `Embedding ${p.done.toLocaleString()} / ${p.total.toLocaleString()}…` });
     }
+  }, []);
 
-    started.current = true;
-    setProgress(8);
-    const checkpoints: [number, number][] = [
-      [3000, 28], [8000, 50], [16000, 68], [30000, 78], [55000, 86], [85000, 92],
-    ];
-    const timers = checkpoints.map(([d, p]) => setTimeout(() => setProgress(p), d));
-    return () => timers.forEach(clearTimeout);
-  }, [isLoading]);
+  const onDone = useCallback(() => setState({ percent: 100, message: "Done!" }), []);
+  const reset = useCallback(() => setState({ percent: 0, message: "" }), []);
 
-  return progress;
+  return { ...state, onProgress, onDone, reset };
 }

@@ -5,13 +5,6 @@
   overflow: hidden;
 }
 
-.center {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.loadingText { font-size: 14px; color: var(--text-muted); }
 
 /* ── Nav ─────────────────────────────── */
 .nav {

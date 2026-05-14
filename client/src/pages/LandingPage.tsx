@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { useState, useRef, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRepoStore } from "../store/useRepoStore";
-import { ingestRepo } from "../api";
+import { ingestRepoStream } from "../api";
 import { useIngestionProgress } from "../hooks/useIngestionProgress";
 import { useTheme } from "../hooks/useTheme";
 import { EXAMPLES } from "../constants";
@@ -13,19 +13,25 @@ export default function LandingPage() {
   const { theme, toggle } = useTheme();
   const [url, setUrl] = useState("");
   const isLoading = status === "ingesting";
-  const progress = useIngestionProgress(isLoading);
+  const { percent, message, onProgress, onDone, reset } = useIngestionProgress();
+  const cleanupRef = useRef<(() => void) | null>(null);
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!url.trim()) return;
+    if (!url.trim() || isLoading) return;
     setIngesting();
-    try {
-      const { repoId, metadata } = await ingestRepo(url.trim());
-      setReady(repoId, metadata);
-      navigate(`/repo/${repoId}`);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Ingestion failed");
-    }
+    reset();
+
+    cleanupRef.current = ingestRepoStream(
+      url.trim(),
+      onProgress,
+      (repoId, metadata) => {
+        onDone();
+        setReady(repoId, metadata);
+        setTimeout(() => navigate(`/repo/${repoId}`), 300);
+      },
+      (err) => setError(err)
+    );
   }
 
   return (
@@ -60,19 +66,15 @@ export default function LandingPage() {
           </button>
         </form>
 
-        {progress > 0 && (
+        {percent > 0 && (
           <div className={styles.progressTrack}>
-            <div className={styles.progressFill} style={{ width: `${progress}%` }} />
+            <div className={styles.progressFill} style={{ width: `${percent}%` }} />
           </div>
         )}
 
         <p className={styles.langNote}>JavaScript &amp; TypeScript · Python, Go, Rust coming soon</p>
 
-        {isLoading && (
-          <p className={styles.hint}>
-            Fetching files · parsing AST · generating embeddings…
-          </p>
-        )}
+        {isLoading && message && <p className={styles.hint}>{message}</p>}
         {status === "error" && error && <p className={styles.errorMsg}>{error}</p>}
       </div>
 

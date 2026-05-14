@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useRepoStore } from "../store/useRepoStore";
-import { getOverview } from "../api";
 import { useTheme } from "../hooks/useTheme";
 import OverviewTab from "../components/OverviewTab";
 import PulseTab from "../components/PulseTab";
@@ -11,29 +10,23 @@ import styles from "./RepoPage.module.css";
 export default function RepoPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { metadata, setReady, reset, geminiKey, setGeminiKey } = useRepoStore();
+  const { metadata, geminiKey, setGeminiKey } = useRepoStore();
   const { theme, toggle } = useTheme();
-  const [loading, setLoading]           = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [keyInput, setKeyInput]         = useState("");
   const [activeTab, setActiveTab]       = useState<"overview" | "pulse">("overview");
 
   useEffect(() => {
-    if (!id) return;
-    if (!metadata || metadata.id !== id) setLoading(true);
-    getOverview(id)
-      .then((data) => setReady(id, data))
-      .catch(() => { reset(); navigate("/"); })
-      .finally(() => setLoading(false));
+    if (!id || !metadata || metadata.id !== id) {
+      navigate("/", { replace: true });
+    }
   }, [id]);
 
   function openKeyModal() { setKeyInput(geminiKey ?? ""); setShowKeyModal(true); }
   function saveKey()      { setGeminiKey(keyInput.trim() || null); setShowKeyModal(false); }
   function removeKey()    { setGeminiKey(null); setKeyInput(""); setShowKeyModal(false); }
 
-  if (loading || !metadata || metadata.id !== id) {
-    return <div className={styles.center}><p className={styles.loadingText}>Loading…</p></div>;
-  }
+  if (!metadata || metadata.id !== id) return null;
 
   return (
     <div className={styles.page}>
