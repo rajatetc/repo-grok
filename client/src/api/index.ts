@@ -55,6 +55,7 @@ export async function getOverview(repoId: string): Promise<RepoMetadata> {
 export function streamQuery(
   repoId: string,
   query: string,
+  history: { role: "user" | "assistant"; content: string }[],
   onChunk: (text: string) => void,
   onDone: () => void,
   onError: (msg: string) => void
@@ -68,7 +69,7 @@ export function streamQuery(
   fetch(`${API_BASE}/api/repos/${repoId}/query`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, history }),
     signal: controller.signal,
   }).then(async (res) => {
     if (!res.ok || !res.body) {

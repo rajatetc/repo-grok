@@ -39,6 +39,12 @@ export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
     const query = input.trim();
     if (!query || streaming) return;
 
+    // Snapshot completed turns before adding the new messages
+    const history = messages
+      .filter((m) => m.content.trim().length > 0)
+      .slice(-10)
+      .map((m) => ({ role: m.role, content: m.content }));
+
     setInput("");
     setStreaming(true);
     addMessage({ id: crypto.randomUUID(), role: "user", content: query });
@@ -47,6 +53,7 @@ export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
     cleanupRef.current = streamQuery(
       repoId,
       query,
+      history,
       (chunk) => appendToLastMessage(chunk),
       () => setStreaming(false),
       (err) => {
