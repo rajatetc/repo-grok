@@ -104,8 +104,6 @@ export default function LandingPage() {
         )}
 
 
-        {isLoading && message && <p className={styles.hint}>{message}</p>}
-
         <div className={styles.pipeline}>
           {STEPS.map((step, i) => (
             <div key={step.id} className={styles.pipelineItem}>
