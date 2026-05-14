@@ -4,11 +4,16 @@ import type { RepoMetadata } from "../types/index.js";
 
 const LLM_MODEL = "gemini-2.5-flash";
 
-function getModel(apiKey?: string) {
+export type HistoryMessage = { role: "user" | "assistant"; content: string };
+
+function getModel(apiKey?: string, systemInstruction?: string) {
   const key = apiKey || process.env.GEMINI_API_KEY;
   if (!key) throw new Error("No Gemini API key available.");
   const genAI = new GoogleGenerativeAI(key);
-  return genAI.getGenerativeModel({ model: LLM_MODEL });
+  return genAI.getGenerativeModel({
+    model: LLM_MODEL,
+    ...(systemInstruction ? { systemInstruction } : {}),
+  });
 }
 
 function buildRepoContext(metadata: RepoMetadata): string {
@@ -47,35 +52,49 @@ function buildContext(results: SearchResult[]): string {
     .join("\n\n");
 }
 
-// --- Query: answer a free-form question about the codebase ---
-
 export async function* streamAnswer(
   query: string,
   results: SearchResult[],
   metadata: RepoMetadata,
-  apiKey?: string
+  apiKey?: string,
+  history: HistoryMessage[] = []
 ): AsyncGenerator<string> {
-  const model = getModel(apiKey);
-
-  const prompt = `You are an expert code assistant helping a developer understand a codebase.
+  const systemInstruction = `You are an expert code assistant helping a developer understand a codebase.
 
 ${buildRepoContext(metadata)}
-
-Relevant code:
-
-${buildContext(results)}
-
-Question: ${query}
 
 Answer directly and concisely. Reference specific file paths and function names where relevant.
 Never mention "the provided snippets", "the context", or how you retrieved the information — just answer as if you know the codebase.
 If you don't have enough information to answer confidently, say so briefly.
 Do not make up code that isn't in the context above.`;
 
-  const response = await model.generateContentStream(prompt);
+  const model = getModel(apiKey, systemInstruction);
+
+  // Convert to Gemini format: "assistant" → "model", skip empty messages
+  const geminiHistory = history
+    .filter((m) => m.content.trim().length > 0)
+    .map((m) => ({
+      role: (m.role === "user" ? "user" : "model") as "user" | "model",
+      parts: [{ text: m.content }],
+    }));
+
+  // Gemini requires history to end with a model turn
+  const validHistory =
+    geminiHistory.length > 0 && geminiHistory[geminiHistory.length - 1].role === "user"
+      ? geminiHistory.slice(0, -1)
+      : geminiHistory;
+
+  const chat = model.startChat({ history: validHistory });
+
+  // RAG chunks are fresh per query — include them in the current message, not history
+  const currentMessage =
+    results.length > 0
+      ? `Relevant code:\n\n${buildContext(results)}\n\nQuestion: ${query}`
+      : query;
+
+  const response = await chat.sendMessageStream(currentMessage);
   for await (const chunk of response.stream) {
     const text = chunk.text();
     if (text) yield text;
   }
 }
-

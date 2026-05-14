@@ -24,7 +24,7 @@ import { detectTechStack } from "./utils/techDetector.js";
 import { embedChunks, embedQuery, loadEmbeddingModel } from "./services/embeddings.js";
 import { LRUCache } from "lru-cache";
 import { storeChunks, search, hasRepo } from "./services/vectorStore.js";
-import { streamAnswer } from "./services/llm.js";
+import { streamAnswer, type HistoryMessage } from "./services/llm.js";
 import { loadSeeds } from "./services/seeds.js";
 import { normalizeUrl } from "./utils/normalizeUrl.js";
 import type { RepoMetadata } from "./types/index.js";
@@ -112,7 +112,12 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
     const techStack = detectTechStack(files);
     const chunks = chunkFiles(files);
 
-    const embeddedChunks = await embedChunks(chunks);
+    const MAX_TOTAL_CHUNKS = 3000;
+    const truncated = chunks.length > MAX_TOTAL_CHUNKS;
+    const chunksToEmbed = truncated ? chunks.slice(0, MAX_TOTAL_CHUNKS) : chunks;
+    if (truncated) console.log(`Repo has ${chunks.length} chunks — truncating to ${MAX_TOTAL_CHUNKS} for performance`);
+
+    const embeddedChunks = await embedChunks(chunksToEmbed);
 
     // --- Extra stats ---
     const linesOfCode = sourceFiles.reduce((n, f) => n + f.content.split("\n").length, 0);
@@ -184,7 +189,7 @@ app.get("/api/repos/:id/overview", async (req: Request, res: Response) => {
 // POST /api/repos/:id/query — ask a question (streamed via SSE)
 app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
   const repoId = req.params.id;
-  const { query } = req.body ?? {};
+  const { query, history } = req.body ?? {};
 
   if (!query || typeof query !== "string") {
     return res.status(400).json({ error: "Missing or invalid 'query' in request body" });
@@ -192,6 +197,17 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
   if (query.length > 2000) {
     return res.status(400).json({ error: "Query too long. Max 2000 characters." });
   }
+
+  const safeHistory: HistoryMessage[] = (Array.isArray(history) ? history : [])
+    .filter(
+      (m): m is HistoryMessage =>
+        m !== null &&
+        typeof m === "object" &&
+        (m.role === "user" || m.role === "assistant") &&
+        typeof m.content === "string" &&
+        m.content.trim().length > 0
+    )
+    .slice(-10);
   const metadata = repoMetadataStore.get(repoId);
   if (!metadata || !hasRepo(repoId)) {
     return res.status(404).json({ error: "Repo not found. It may have expired or never been ingested." });
@@ -215,7 +231,7 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
     const queryVector = await embedQuery(query);
     const results = search(repoId, queryVector);
 
-    for await (const textChunk of streamAnswer(query, results, metadata, userApiKey || undefined)) {
+    for await (const textChunk of streamAnswer(query, results, metadata, userApiKey || undefined, safeHistory)) {
       if (clientClosed) return;
       // SSE frame format: `data: <payload>\n\n`. Both \n and \r terminate a
       // frame, so encode both — the client decodes on receive.
