@@ -293,4 +293,26 @@
   color: var(--icon-blue);
 }
 
+/* ── Mobile: stack form + pipeline vertically ── */
+@media (max-width: 640px) {
+  .page { padding: 32px 16px 24px; gap: 32px; }
+
+  .form { flex-direction: column; }
+  .button { width: 100%; padding: 12px 16px; }
+
+  .pipeline {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .pipelineItem { justify-content: center; }
+
+  /* Arrows point down between stacked steps */
+  .stepArrow { transform: rotate(90deg); padding: 2px 0; }
+
+  /* Hover tooltips don't work on touch — hide them; the per-step
+     tech subtitle is already visible and carries enough info. */
+  .tooltip { display: none; }
+}
+
 
