@@ -76,14 +76,14 @@ repo-grok/
 │   │   │   ├── chunker.ts      # Babel AST chunker — semantic splitting
 │   │   │   ├── embeddings.ts   # Local transformer model (all-MiniLM-L6-v2)
 │   │   │   ├── vectorStore.ts  # In-memory cosine similarity search
-│   │   │   ├── llm.ts          # Gemini Flash — streaming RAG answers
-│   │   │   └── seeds.ts        # Pre-baked example repo loader
+│   │   │   └── llm.ts          # Gemini Flash — streaming RAG answers
 │   │   ├── utils/
-│   │   │   └── techDetector.ts # Tech stack detection
+│   │   │   ├── techDetector.ts # Tech stack detection
+│   │   │   ├── normalizeUrl.ts # Canonical URL form for dedup cache
+│   │   │   └── packageJson.ts  # Find + parse package.json from repo files
 │   │   ├── types/
 │   │   │   └── index.ts        # Shared types
 │   │   └── index.ts            # Express server + routes
-│   ├── seeds/                   # Pre-baked example repos (committed JSON)
 │   ├── package.json
 │   └── tsconfig.json
 ├── client/
@@ -91,13 +91,18 @@ repo-grok/
 │   │   ├── components/
 │   │   │   ├── OverviewTab.tsx  # Stats, tech badges, folder tree
 │   │   │   ├── PulseTab.tsx     # Live GitHub data (stars, issues, PRs, contributors)
-│   │   │   └── ChatTab.tsx      # SSE-streamed chat
+│   │   │   ├── ChatTab.tsx      # SSE-streamed chat
+│   │   │   ├── ThemeToggle.tsx  # Reusable dark/light toggle button
+│   │   │   └── Footer.tsx       # Shared footer (Built by · GitHub · LinkedIn · X)
 │   │   ├── pages/
 │   │   │   ├── LandingPage.tsx
 │   │   │   └── RepoPage.tsx     # Two-column layout: sidebar tabs + chat
 │   │   ├── hooks/
-│   │   │   ├── useTheme.ts      # Dark mode — localStorage + system preference
-│   │   │   └── useIngestionProgress.ts
+│   │   │   ├── useTheme.ts            # Dark mode — localStorage + system preference
+│   │   │   ├── useIngestionProgress.ts
+│   │   │   └── usePulse.ts            # GitHub repo + issues + PRs + contributors fetcher
+│   │   ├── utils/
+│   │   │   └── format.ts        # timeAgo, fmtNum helpers
 │   │   └── store/
 │   │       └── useRepoStore.ts  # Zustand — metadata, messages, Gemini key
 │   ├── package.json

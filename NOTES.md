@@ -9,7 +9,6 @@
 - [Test files included](#why-test-files-are-included-in-ingestion)
 - [File size limit](#why-file-size-limit-is-500kb)
 - [Zip download over per-file API](#why-zip-download-instead-of-per-file-octokit-calls)
-- [Pre-baked seeds](#pre-baked-seeds-for-example-repos)
 - [API key handling](#api-key-handling)
 - [IP-based rate limiting](#why-ip-based-rate-limiting-instead-of-login-for-mvp)
 - [Deployment strategy](#deployment-strategy)
@@ -116,24 +115,6 @@ file decoded to UTF-8. Total uncompressed bytes are capped at 150 MB to prevent 
 
 ---
 
-## Pre-baked seeds for example repos
-
-**Problem:** The example repos were re-indexed on every server restart, wasting 3–5 min of CPU.
-
-**Solution:** `npm run prebake` runs once offline, writes `server/seeds/{owner}-{repo}.json`,
-and those files are committed to the repo. On startup, `loadSeeds()` reads them and populates
-the vector store and URL cache — zero API calls, instant.
-
-**How it works:**
-1. `prebake.ts` calls the same ingestion pipeline (fetch → chunk → embed) as live ingestion
-2. Output: `{ repoId, url, metadata, chunks: [...with embeddings] }`
-3. `loadSeeds()` reads all `*.json` from `server/seeds/`, calls `storeChunks()`, populates caches
-
-**Re-running:** only needed when refreshing a seed. Pass specific repo names to force:
-`npm run prebake -- redux`
-
----
-
 ## API key handling
 `GEMINI_API_KEY` lives in the server's environment — clients never see it. Used only for LLM
 calls (question answering), not for indexing.
@@ -194,6 +175,12 @@ Fallback to line-based splitting if Babel can't parse the file.
 - Open issues (top 5, with labels, linking to GitHub issues page)
 - Open PRs (top 5, linking to GitHub pulls page)
 - Top 5 contributors with avatars
+
+**Ingestion flow:**
+- POST /api/repos is now SSE — streams `fetch → chunk → embed X/N → done` events
+- Client drives a real progress bar from these events; pipeline steps (Fetch → Parse → Embed → Chat) light up live
+- Chunks sorted by semantic priority (components first, imports last) before the 3000-chunk cap
+- Stale repo URL navigated to directly redirects home immediately (no stuck loading screen)
 
 **Chat:**
 - User messages: right-aligned pill bubble
