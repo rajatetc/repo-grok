@@ -2,11 +2,16 @@
 
 AI-powered codebase explainer. Paste a GitHub URL and get an interactive overview, tech stack breakdown, repo health metrics, and a chat interface to ask questions about any JS/TS codebase.
 
+## Live
+
+- **App:** https://repo-grok.vercel.app
+- **API:** https://repo-grok.onrender.com (`/health` for status)
+
 ## How it works
 
 1. Downloads the repo as a zip via GitHub API (one HTTP call)
 2. Parses files into semantic chunks — functions, components, hooks, classes, types — using Babel AST
-3. Converts chunks to vector embeddings locally via `all-MiniLM-L6-v2` (no API quota)
+3. Converts chunks to vector embeddings on the server via `all-MiniLM-L6-v2` — no LLM API quota used for indexing
 4. On each question, retrieves the most relevant chunks via cosine similarity and sends only those to Gemini — not the whole codebase (RAG)
 
 ## Prerequisites
@@ -75,15 +80,54 @@ Frontend: `http://localhost:5173` · Backend: `http://localhost:3001`
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/repos` | Ingest a GitHub repo |
-| `GET` | `/api/repos/:id/overview` | Repo metadata + tech stack |
-| `POST` | `/api/repos/:id/query` | Ask a question (SSE streamed) |
+| `POST` | `/api/repos` | Ingest a GitHub repo (SSE streamed progress) |
+| `POST` | `/api/repos/:id/query` | Ask a question (SSE streamed answer) |
 | `GET` | `/health` | Health check |
 
 ## Project docs
 
 - [`NOTES.md`](./NOTES.md) — architectural decisions and the reasoning behind them
 - [`IDEAS.md`](./IDEAS.md) — future features and upgrade paths
+
+## Deployment
+
+The live app runs on free tiers across three services:
+
+### Backend → Render
+
+- **Type:** Web Service (free, 512MB, 0.1 CPU)
+- **Root directory:** `server`
+- **Build command:** `npm install && npm run build`
+- **Start command:** `NODE_ENV=production npm start`
+- **Auto-deploys** on push to `main`
+
+**Environment variables (Render dashboard):**
+
+| Key | Notes |
+|-----|-------|
+| `GEMINI_API_KEY` | Required for chat |
+| `GITHUB_TOKEN` | Optional but recommended (60→5000 req/hr) |
+| `CLIENT_URL` | Vercel URL, for CORS |
+
+`NODE_ENV` is set only at runtime in the start command — keeping it out of the dashboard so `npm install` still picks up devDependencies during the build step.
+
+### Frontend → Vercel
+
+- **Framework preset:** Vite (auto-detected)
+- **Root directory:** `client`
+- **Auto-deploys** on push to `main`
+
+**Environment variable (Vercel dashboard):**
+
+| Key | Value |
+|-----|-------|
+| `VITE_API_URL` | The Render backend URL |
+
+### Keepalive → cron-job.org
+
+Render's free tier sleeps the service after 15 minutes of idle traffic, and waking it cold-loads the embedding model (~30s). A free cron-job.org cron pings `/health` every 14 minutes (`*/14 * * * *`) so the server stays warm.
+
+Render's free monthly budget is 750 hours — continuous uptime is 720, so a single always-warm service stays under the cap.
 
 ## Tech stack
 
@@ -92,7 +136,7 @@ Frontend: `http://localhost:5173` · Backend: `http://localhost:3001`
 | Frontend | React + TypeScript + Vite |
 | Backend | Node.js + Express + TypeScript |
 | AST parsing | Babel (`@babel/parser`, `@babel/traverse`) |
-| Embeddings | `@xenova/transformers` — `all-MiniLM-L6-v2`, runs locally |
+| Embeddings | `@xenova/transformers` — `all-MiniLM-L6-v2`, runs on the server (no LLM API used) |
 | LLM | Gemini 2.5 Flash (free tier) |
 | Vector search | In-memory cosine similarity |
 | GitHub API | Octokit + direct zipball download |
