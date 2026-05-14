@@ -13,7 +13,7 @@ export function useIngestionProgress() {
       setState({ percent: 30, message: `Parsed ${p.total.toLocaleString()} chunks…` });
     } else if (p.stage === "embed") {
       const pct = 30 + Math.round((p.done / p.total) * 60);
-      setState({ percent: pct, message: `Embedding ${p.done.toLocaleString()} / ${p.total.toLocaleString()}…` });
+      setState({ percent: pct, message: `Embedding chunks ${p.done.toLocaleString()} / ${p.total.toLocaleString()}…` });
     }
   }, []);
 

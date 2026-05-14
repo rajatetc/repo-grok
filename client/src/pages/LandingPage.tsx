@@ -47,7 +47,7 @@ export default function LandingPage() {
         </div>
 
         <p className={styles.tagline}>
-          Understand any codebase in minutes.<br />
+          Understand any JavaScript or TypeScript codebase in minutes.<br />
           Paste a GitHub URL and start exploring.
         </p>
 
@@ -72,7 +72,6 @@ export default function LandingPage() {
           </div>
         )}
 
-        <p className={styles.langNote}>JavaScript &amp; TypeScript · Python, Go, Rust coming soon</p>
 
         {isLoading && message && <p className={styles.hint}>{message}</p>}
         {status === "error" && error && <p className={styles.errorMsg}>{error}</p>}

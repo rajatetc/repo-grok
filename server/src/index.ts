@@ -13,6 +13,12 @@ function clientError(err: unknown, fallback: string): string {
     if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("rate limit")) {
       return "Gemini rate limit reached. Please wait a moment and try again.";
     }
+    if (msg.includes("503") || msg.toLowerCase().includes("service unavailable") || msg.toLowerCase().includes("overloaded")) {
+      return "Gemini is temporarily overloaded. Please try again in a moment.";
+    }
+    if (msg.toLowerCase().includes("failed to parse stream") || msg.toLowerCase().includes("parse stream")) {
+      return "Response was cut short — Gemini dropped the stream. Try asking again.";
+    }
     if (isDev) return msg;
   }
   return fallback;
