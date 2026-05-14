@@ -3,24 +3,26 @@ import type { IngestProgress } from "../api";
 
 export type IngestionStage = "idle" | "fetch" | "chunk" | "embed" | "done";
 
-type State = { percent: number; stage: IngestionStage };
+export type IngestionState = { percent: number; stage: IngestionStage };
+
+export const IDLE_STATE: IngestionState = { percent: 0, stage: "idle" };
+export const DONE_STATE: IngestionState = { percent: 100, stage: "done" };
+
+// Pure mapping from a server progress event to UI state — extracted so it
+// can be unit-tested without rendering.
+export function nextProgressState(p: IngestProgress): IngestionState {
+  if (p.stage === "fetch") return { percent: 15, stage: "fetch" };
+  if (p.stage === "chunk") return { percent: 30, stage: "chunk" };
+  const pct = 30 + Math.round((p.done / p.total) * 60);
+  return { percent: pct, stage: "embed" };
+}
 
 export function useIngestionProgress() {
-  const [state, setState] = useState<State>({ percent: 0, stage: "idle" });
+  const [state, setState] = useState<IngestionState>(IDLE_STATE);
 
-  const onProgress = useCallback((p: IngestProgress) => {
-    if (p.stage === "fetch") {
-      setState({ percent: 15, stage: "fetch" });
-    } else if (p.stage === "chunk") {
-      setState({ percent: 30, stage: "chunk" });
-    } else if (p.stage === "embed") {
-      const pct = 30 + Math.round((p.done / p.total) * 60);
-      setState({ percent: pct, stage: "embed" });
-    }
-  }, []);
-
-  const onDone = useCallback(() => setState({ percent: 100, stage: "done" }), []);
-  const reset = useCallback(() => setState({ percent: 0, stage: "idle" }), []);
+  const onProgress = useCallback((p: IngestProgress) => setState(nextProgressState(p)), []);
+  const onDone = useCallback(() => setState(DONE_STATE), []);
+  const reset = useCallback(() => setState(IDLE_STATE), []);
 
   return { ...state, onProgress, onDone, reset };
 }
