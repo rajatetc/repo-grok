@@ -15,6 +15,7 @@ interface RepoStore {
   setReady: (repoId: string, metadata: RepoMetadata) => void;
   setError: (error: string) => void;
   setChunkWarning: (msg: string | null) => void;
+  cancelIngest: () => void;
 
   addMessage: (message: ChatMessage) => void;
   appendToLastMessage: (text: string) => void;
@@ -39,6 +40,7 @@ export const useRepoStore = create<RepoStore>((set) => ({
     })),
   setError: (error) => set({ status: "error", error }),
   setChunkWarning: (msg) => set({ chunkWarning: msg }),
+  cancelIngest: () => set({ status: "idle", error: null, chunkWarning: null }),
 
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
   appendToLastMessage: (text) =>

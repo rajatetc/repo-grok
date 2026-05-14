@@ -47,12 +47,19 @@ function stepClassName(stepId: IngestionStage, stage: IngestionStage, styles: Re
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const { setIngesting, setReady, setError, setChunkWarning, status, error } = useRepoStore();
+  const { setIngesting, setReady, setError, setChunkWarning, cancelIngest, status, error } = useRepoStore();
   const { recents, addRecent } = useRecentRepos();
   const [url, setUrl] = useState("");
   const isLoading = status === "ingesting";
   const { percent, stage, onProgress, onDone, reset } = useIngestionProgress();
   const cleanupRef = useRef<(() => void) | null>(null);
+
+  function handleCancel() {
+    cleanupRef.current?.();
+    cleanupRef.current = null;
+    cancelIngest();
+    reset();
+  }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -99,9 +106,15 @@ export default function LandingPage() {
             disabled={isLoading}
             spellCheck={false}
           />
-          <button className={styles.button} type="submit" disabled={isLoading}>
-            {isLoading ? "Indexing…" : "Explore →"}
-          </button>
+          {isLoading ? (
+            <button className={styles.button} type="button" onClick={handleCancel} title="Cancel">
+              Cancel
+            </button>
+          ) : (
+            <button className={styles.button} type="submit">
+              Explore →
+            </button>
+          )}
         </form>
 
         {percent > 0 && (

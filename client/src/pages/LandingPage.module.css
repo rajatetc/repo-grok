@@ -178,11 +178,15 @@
   color: var(--icon-blue);
   background: var(--accent-dim);
 }
-.stepActive .stepIcon { animation: stepPulse 1.4s ease-in-out infinite; }
+.stepActive .stepIcon {
+  animation: stepPulse 1.1s ease-in-out infinite;
+  display: inline-block;
+  transform-origin: center;
+}
 
 @keyframes stepPulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.35; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.25; transform: scale(0.55); }
 }
 
 /* future steps during loading — muted via color so tooltip stays opaque */
