@@ -1,65 +1,78 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { CodeChunk } from "../types/index.js";
 
-// gemini-embedding-001 is the current free-tier embedding model.
-// It exposes embedContent (single text) but NOT batchEmbedContents.
-//
-// Empirical free-tier rate limit is *much* lower than the 1500 RPM
-// docs imply. 8 parallel calls (~320 RPM effective) were rejected
-// instantly even with a brand-new API key. 3 parallel @ 2s pacing
-// keeps us around 90 RPM effective — safely under the real ceiling
-// while still giving runtime ingestion enough throughput for usable UX.
-const MODEL = "models/gemini-embedding-001";
-const BATCH_SIZE = 3;
-const BATCH_DELAY_MS = 2000;
-const MAX_RETRIES = 4;
+// Cloudflare Workers AI — @cf/baai/bge-small-en-v1.5.
+// 384-dim vectors, mean pooling, 512 max tokens per text.
+// Free tier: 10,000 neurons/day shared across all models, ~5K-10K
+// embed calls/day. 3000 RPM ceiling on the embeddings task as a whole.
+// Supports up to 100 texts per request — so a typical repo (a few
+// hundred chunks) fits in 3-5 API calls.
+const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
+const TOKEN = process.env.CLOUDFLARE_AI_TOKEN;
+const MODEL = "@cf/baai/bge-small-en-v1.5";
+const ENDPOINT = ACCOUNT_ID
+  ? `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/ai/run/${MODEL}`
+  : "";
 
-function getModel(apiKey?: string) {
-  const key = apiKey ?? process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("GEMINI_API_KEY not set");
-  const genAI = new GoogleGenerativeAI(key);
-  return genAI.getGenerativeModel({ model: MODEL });
-}
+const BATCH_SIZE = 100;          // CF's hard max per request
+const MAX_CHARS_PER_TEXT = 1800; // BGE input limit is 512 tokens (~2000 chars); truncate defensively
+const MAX_RETRIES = 3;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function chunkToText(chunk: CodeChunk): string {
-  return [
+  const text = [
     `File: ${chunk.filePath}`,
     `Type: ${chunk.type}`,
     chunk.name ? `Name: ${chunk.name}` : null,
     chunk.content,
   ].filter(Boolean).join("\n");
+  return text.length > MAX_CHARS_PER_TEXT ? text.slice(0, MAX_CHARS_PER_TEXT) : text;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+interface CfResponse {
+  result?: { shape?: number[]; data?: number[][]; pooling?: string };
+  success?: boolean;
+  errors?: Array<{ code: number; message: string }>;
+}
 
-async function embedOne(
-  model: ReturnType<typeof getModel>,
-  text: string,
-  attempt = 0
-): Promise<number[]> {
-  try {
-    const result = await model.embedContent(text);
-    return result.embedding.values;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const isRateLimit = msg.includes("429") || msg.toLowerCase().includes("rate") || msg.toLowerCase().includes("quota");
-    if (isRateLimit && attempt < MAX_RETRIES) {
-      // Exponential backoff: 3s, 6s, 12s, 24s. The free tier's rate
-      // window is on the order of seconds, so shorter waits often hit
-      // the same throttle immediately.
-      const backoffMs = 3000 * Math.pow(2, attempt);
-      console.warn(`Embed rate-limited (attempt ${attempt + 1}/${MAX_RETRIES}), backing off ${backoffMs}ms`);
-      await sleep(backoffMs);
-      return embedOne(model, text, attempt + 1);
-    }
-    throw err;
+async function callCloudflare(texts: string[], attempt = 0): Promise<number[][]> {
+  if (!ACCOUNT_ID || !TOKEN) {
+    throw new Error("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AI_TOKEN must be set");
   }
+
+  const res = await fetch(ENDPOINT, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ text: texts, pooling: "mean" }),
+  });
+
+  if (res.status === 429 && attempt < MAX_RETRIES) {
+    const backoffMs = 1000 * Math.pow(2, attempt);
+    console.warn(`Cloudflare rate-limited (attempt ${attempt + 1}/${MAX_RETRIES}), backing off ${backoffMs}ms`);
+    await sleep(backoffMs);
+    return callCloudflare(texts, attempt + 1);
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Cloudflare embed failed: ${res.status} ${res.statusText} ${body.slice(0, 300)}`);
+  }
+
+  const json = (await res.json()) as CfResponse;
+  if (!json.success || !json.result?.data) {
+    const errMsg = json.errors?.[0]?.message ?? "unknown error";
+    throw new Error(`Cloudflare embed error: ${errMsg}`);
+  }
+  return json.result.data;
 }
 
-// Loader retained for API compatibility with index.ts — Gemini has no model to warm.
+// Retained for API symmetry with index.ts startup.
 export async function loadEmbeddingModel(): Promise<void> {
-  if (!process.env.GEMINI_API_KEY) {
-    console.warn("WARN: GEMINI_API_KEY not set — embedding requests will fail.");
+  if (!ACCOUNT_ID || !TOKEN) {
+    console.warn("WARN: CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_AI_TOKEN not set — embeddings will fail.");
   }
 }
 
@@ -67,31 +80,27 @@ export async function embedChunks(
   chunks: CodeChunk[],
   onProgress?: (done: number, total: number) => void
 ): Promise<CodeChunk[]> {
-  console.log(`Embedding ${chunks.length} chunks via Gemini (~90 RPM)…`);
-  const model = getModel();
+  console.log(`Embedding ${chunks.length} chunks via Cloudflare BGE…`);
 
   for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
     const batch = chunks.slice(i, i + BATCH_SIZE);
     const texts = batch.map(chunkToText);
+    const embeddings = await callCloudflare(texts);
 
-    const embeddings = await Promise.all(texts.map((t) => embedOne(model, t)));
     for (let j = 0; j < batch.length; j++) {
       chunks[i + j].embedding = embeddings[j];
     }
 
     const done = Math.min(i + BATCH_SIZE, chunks.length);
     onProgress?.(done, chunks.length);
-    if (done % 30 === 0 || done === chunks.length) {
-      console.log(`  ${done}/${chunks.length}`);
-    }
-
-    if (i + BATCH_SIZE < chunks.length) await sleep(BATCH_DELAY_MS);
+    console.log(`  ${done}/${chunks.length}`);
   }
 
   return chunks;
 }
 
-export async function embedQuery(query: string, apiKey?: string): Promise<number[]> {
-  const model = getModel(apiKey);
-  return embedOne(model, query);
+export async function embedQuery(query: string): Promise<number[]> {
+  const truncated = query.length > MAX_CHARS_PER_TEXT ? query.slice(0, MAX_CHARS_PER_TEXT) : query;
+  const [embedding] = await callCloudflare([truncated]);
+  return embedding;
 }

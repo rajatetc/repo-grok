@@ -36,7 +36,10 @@ import { normalizeUrl } from "./utils/normalizeUrl.js";
 import type { RepoMetadata } from "./types/index.js";
 
 if (!process.env.GEMINI_API_KEY) {
-  console.warn("WARN: GEMINI_API_KEY not set — chat and change-guide will fail, but indexing will work.");
+  console.warn("WARN: GEMINI_API_KEY not set — chat will fail.");
+}
+if (!process.env.CLOUDFLARE_ACCOUNT_ID || !process.env.CLOUDFLARE_AI_TOKEN) {
+  console.warn("WARN: Cloudflare credentials not set — ingestion will fail.");
 }
 if (!process.env.GITHUB_TOKEN) {
   console.warn("WARN: GITHUB_TOKEN is not set. GitHub API limited to 60 req/hr.");
@@ -265,7 +268,7 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
   const userApiKey = req.headers["x-gemini-key"] as string | undefined;
 
   try {
-    const queryVector = await embedQuery(query, userApiKey || undefined);
+    const queryVector = await embedQuery(query);
     const results = search(repoId, queryVector);
 
     for await (const textChunk of streamAnswer(query, results, metadata, userApiKey || undefined, safeHistory)) {
