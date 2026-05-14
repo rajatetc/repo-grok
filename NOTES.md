@@ -2,18 +2,19 @@
 
 ## Contents
 - [In-memory vector store](#why-in-memory-vector-store-instead-of-a-vector-db)
-- [Gemini for everything](#why-gemini-for-everything-embeddings--llm)
+- [Local embeddings instead of Gemini](#why-local-embeddings-instead-of-gemini-api)
 - [No model abstraction layer yet](#why-no-model-abstraction-layer-yet)
 - [Embedding context enrichment](#why-embeddings-include-file-path--chunk-type-not-just-raw-code)
-- [Tech stack detection via LLM](#why-tech-stack-detection-uses-gemini-instead-of-a-hardcoded-map)
+- [Tech stack detection](#why-tech-stack-detection-is-deterministic-not-llm-based)
 - [Test files included](#why-test-files-are-included-in-ingestion)
-- [500KB file size limit](#why-file-size-limit-is-500kb-not-50kb)
-- [API key strategy for Phase 9](#api-key-strategy-hybrid-pre-warm--user-supplied)
-- [Frontend UX decisions for Phase 9](#frontend-ux-decisions-phase-9)
-- [API key security](#api-key-security)
+- [File size limit](#why-file-size-limit-is-500kb)
+- [Zip download over per-file API](#why-zip-download-instead-of-per-file-octokit-calls)
+- [Pre-baked seeds](#pre-baked-seeds-for-example-repos)
+- [API key handling](#api-key-handling)
 - [IP-based rate limiting](#why-ip-based-rate-limiting-instead-of-login-for-mvp)
 - [Deployment strategy](#deployment-strategy)
 - [Chunking strategy](#chunking-strategy-top-level-ast-nodes-only)
+- [Frontend UX decisions](#frontend-ux-decisions)
 
 ---
 
@@ -22,28 +23,46 @@ Linear cosine similarity scan over all chunks takes ~10ms in memory for repos wi
 A real vector DB (Pinecone, Qdrant) adds network latency, API cost, and operational complexity
 for no measurable gain at this scale. The entire store lives in a `Map<repoId, CodeChunk[]>`.
 
+**Pros:**
+- Zero latency (no network hop)
+- Zero cost and zero external dependencies
+- Dead simple to reason about — a plain JS array per repo
+- Fast enough: 10k chunks scanned in ~10ms
+
+**Cons:**
+- Lost on server restart (pre-baked seeds mitigate this for examples; user-indexed repos are gone)
+- No persistence across deploys
+- Doesn't scale past ~100k chunks without noticeable slowdown
+- All repos share process memory — a pathologically large repo could OOM
+
 **Upgrade path:** pgvector when persistent storage is added.
 
 ---
 
-## Why Gemini for everything (embeddings + LLM)
-Free tier covers both `gemini-embedding-001` and Gemini 2.5 Flash with no credit card required.
-All Gemini calls are isolated to two files: `embeddings.ts` and `llm.ts` —
-swapping to OpenAI/Anthropic means changing only those two files.
+## Why local embeddings instead of Gemini API
+Originally used `gemini-embedding-001` (768-dim, 100 RPM / 1000 req/day free tier).
+A 150-chunk repo took ~2 min; a 500-chunk repo ~10 min — and re-indexing the same examples
+on every restart burned through the daily quota within minutes.
 
-**Current model choices (as of May 2026):**
-- **Embeddings:** `gemini-embedding-001` (768-dim, 2048 token input limit). Replaces `text-embedding-004`
-  which was removed from the API. Does not support `batchEmbedContents` — we use 5 parallel
-  `embedContent` calls per batch with a 3.5s delay, targeting ~80 RPM (free tier cap is 100 RPM).
-  Each chunk = 1 API call, so a 150-chunk repo takes ~2 min, a 500-chunk repo ~10 min.
-- **LLM:** `gemini-2.5-flash`. `gemini-2.0-flash` has `limit: 0` on AI Studio free tier keys.
+Switched to `@xenova/transformers` running `Xenova/all-MiniLM-L6-v2` locally:
+- **23MB one-time download**, cached on disk after first run
+- **384-dimensional** vectors, cosine similarity works the same way
+- **Zero API calls** for indexing — no quota, no rate limits, no billing
+- **No GEMINI_API_KEY required** to run the server or pre-bake seeds
+- Model loads once into the process on startup (promise-cached singleton), shared by all requests
+
+Gemini is still used for one thing only: the LLM (`gemini-2.0-flash`) that reads retrieved chunks
+and answers questions. That's a much lower call volume (one per user question, not one per chunk).
+
+**Trade-off:** local inference is CPU-bound. On a cold server the first embedding takes ~1–2s
+while the model warms up. Subsequent chunks are fast (~5–20ms each).
 
 ---
 
 ## Why no model abstraction layer yet
-Embedding dimensions differ across providers (Gemini=768, OpenAI=1536). Building a proper adapter
-means normalizing dimensions, streaming formats, rate limits, and error codes. Not worth it until
-there's a second provider to support.
+Embedding dimensions differ across providers (local MiniLM=384, Gemini=768, OpenAI=1536).
+Building a proper adapter means normalizing dimensions, streaming formats, rate limits, and
+error codes. Not worth it until there's a second provider to support.
 
 **See also:** IDEAS.md → Multi-Model Support.
 
@@ -56,15 +75,20 @@ word "auth" doesn't appear in the function body.
 
 ---
 
-## Why tech stack detection uses Gemini instead of a hardcoded map
-A hardcoded map needs constant maintenance as new frameworks emerge. Gemini reads package.json
-and config file names and returns structured JSON — zero maintenance, handles any framework.
-Runs once per ingestion on a tiny payload (~1-2KB), so cost is negligible.
+## Why tech stack detection is deterministic, not LLM-based
+`package.json` is fetched as part of the zip download, so we have the full dep list.
+A lookup table of ~80 known packages covers 90%+ of real-world JS/TS repos instantly,
+with zero API cost, zero latency, and zero failure modes.
 
-**Known limitation:** The file fetcher only pulls `.js/.ts` files, so `package.json` is never
-fetched. Tech detection relies on the LLM inferring stack from import statements and config
-filenames alone. For repos where no package.json content is available, `techStack` returns `{}`.
-Fix: fetch `package.json` explicitly during ingestion (not yet implemented).
+Config file names (e.g. `tailwind.config.*`, `vite.config.*`, `schema.prisma`) add a second
+signal layer for tools that are sometimes in devDeps or not in package.json at all.
+
+**Known limitation:** niche, private, or very new packages won't be detected. Detection is
+best-effort and informational — it does not affect RAG quality.
+
+**Previous approach:** used Gemini for detection. Removed because it added ~500ms latency,
+failed silently when the API key was missing, and an LLM has no real advantage over a lookup
+table for structured JSON input.
 
 ---
 
@@ -75,26 +99,59 @@ cases for Y?". Only generated/third-party code (`node_modules`, `dist`, `build`)
 
 ---
 
-## Why file size limit is 500KB not 50KB
-Files >50KB can still be legitimate source files (large utility files, complex components).
-The chunker splits them anyway, so size doesn't affect LLM token usage. Only truly
-generated/minified files (which are usually much larger or have `.min.` in the name) are skipped.
+## Why file size limit is 500KB
+Files >500KB are typically generated, minified, or lock files — not human-written source.
+The chunker still splits large legitimate files at logical boundaries (blank lines, closing braces),
+so a large component is handled fine.
 
 ---
 
-## API key security
-Sending an API key over HTTPS is the industry standard (OpenAI Playground, Vercel dashboard, etc.).
-JWT doesn't add security here — it's for identity, not secret protection.
+## Why zip download instead of per-file Octokit calls
+A single `GET /repos/:owner/:repo/zipball/:branch` fetches the entire repo in one HTTP round-trip.
+The alternative — Octokit's Git Trees API + individual file content calls — requires N+1 requests
+(one for the tree, one per file), hitting GitHub's rate limit quickly on large repos.
 
-**Planned approach:** user sends key once to `POST /session`, gets back a `sessionId`, all subsequent
-requests use only the `sessionId`. Key never travels over the wire again.
+The zip is loaded into memory, extracted with `adm-zip`, filtered to allowed extensions, and each
+file decoded to UTF-8. Total uncompressed bytes are capped at 150 MB to prevent zip bomb attacks.
+
+---
+
+## Pre-baked seeds for example repos
+
+**Problem:** The example repos were re-indexed on every server restart, wasting 3–5 min of CPU.
+
+**Solution:** `npm run prebake` runs once offline, writes `server/seeds/{owner}-{repo}.json`,
+and those files are committed to the repo. On startup, `loadSeeds()` reads them and populates
+the vector store and URL cache — zero API calls, instant.
+
+**How it works:**
+1. `prebake.ts` calls the same ingestion pipeline (fetch → chunk → embed) as live ingestion
+2. Output: `{ repoId, url, metadata, chunks: [...with embeddings] }`
+3. `loadSeeds()` reads all `*.json` from `server/seeds/`, calls `storeChunks()`, populates caches
+
+**Re-running:** only needed when refreshing a seed. Pass specific repo names to force:
+`npm run prebake -- redux`
+
+---
+
+## API key handling
+`GEMINI_API_KEY` lives in the server's environment — clients never see it. Used only for LLM
+calls (question answering), not for indexing.
+
+Users can optionally supply their own Gemini key via the UI (stored in Zustand memory only —
+never written to disk or localStorage). It travels as an `x-gemini-key` request header and
+takes precedence over the server key. Gone when the browser tab closes.
 
 ---
 
 ## Why IP-based rate limiting instead of login for MVP
-Login requires an auth service (Clerk/Auth0), a database, and session management — 2-3 days of
-work orthogonal to the core product. IP-based rate limiting (`express-rate-limit`) takes 10 minutes
-and prevents casual abuse. Login + quotas belongs in a v2.
+Login requires an auth service, a database, and session management — days of work orthogonal to
+the core product. IP-based rate limiting (`express-rate-limit`) takes minutes and prevents casual
+abuse.
+
+Two limiters:
+- General: 100 req / 15 min (all routes)
+- Ingest: 5 req / hour (POST /api/repos — fetching + embedding is CPU-intensive)
 
 **See also:** IDEAS.md → Auth + Usage Limits.
 
@@ -102,73 +159,53 @@ and prevents casual abuse. Login + quotas belongs in a v2.
 
 ## Deployment strategy
 - **Backend** (Express, stateful) → Railway: persistent process, auto-deploys from GitHub, env vars in dashboard.
-- **Frontend** (React/Vite, static) → Vercel: free static hosting, also deploys from GitHub.
-- API keys (`GEMINI_API_KEY`, `GITHUB_TOKEN`) go in Railway's dashboard — never in GitHub repo or GitHub Secrets.
-- Frontend gets `VITE_API_URL` pointing to the Railway backend URL.
+- **Frontend** (React/Vite, static) → Vercel: free static hosting, deploys from GitHub.
+- `GEMINI_API_KEY` and `GITHUB_TOKEN` go in Railway's dashboard — never in the repo.
+- Frontend `VITE_API_URL` points to the Railway backend URL.
 
-**Caveat:** Railway free tier sleeps after inactivity — in-memory store is lost on wake. Acceptable for MVP.
-**Upgrade path:** add SQLite/pgvector persistence (IDEAS.md) to survive restarts.
+**Caveat:** Railway free tier sleeps after inactivity — in-memory store is lost on wake.
+Pre-baked seeds survive restarts for the example repos.
 
 ---
 
 ## Chunking strategy: top-level AST nodes only
 We only chunk top-level declarations (functions, classes, types at the module root). Chunking every
 nested helper would create thousands of tiny low-value chunks and flood the vector store with noise.
-A 300-line component is split into parts (`MyComponent_part0`, etc.) at blank lines or closing braces.
+A 300-line component is split into parts at blank lines or closing braces.
 Fallback to line-based splitting if Babel can't parse the file.
 
 ---
 
-## API key strategy: hybrid pre-warm + user-supplied
+## Frontend UX decisions
 
-The free-tier limits (100 RPM, 1000 req/day) make a shared server-side key unworkable as soon
-as 2–3 users submit repos concurrently. The solution is a two-tier approach:
+**Layout:**
+- Two-column: fixed 280px sidebar (left) + full-height chat area (right)
+- Sidebar has Overview / Pulse tabs — sticky tab strip, content scrolls independently
 
-**Tier 1 — Pre-warmed example repos (no key needed):**
-- At server startup, ingest the 6 curated example repos if not already in the store
-- These are available instantly to all visitors, zero quota used per request
-- Covers the demo/exploration use case completely
-- Examples: immer, redux, zustand, swr, axios, zod
+**Overview tab:**
+- Stats grid: file count, branch, lines of code, dependencies, dev dependencies
+- Code unit pills: component / hook / function / class counts from chunker output
+- Tech stack badges grouped by category (Framework, Build, State, Testing, Styling, Backend)
+- Collapsible folder tree — top-level dirs open by default, file names link to GitHub
 
-**Tier 2 — User-supplied key for custom repos:**
-- User pastes their own free Gemini AI Studio key to index any other repo
-- Key is sent once to `POST /session`, stored encrypted in memory, never re-transmitted
-- Their quota, their limits — we're not responsible for their usage
-- Framing: "Get a free key at aistudio.google.com — takes 30 seconds, no card needed"
+**Pulse tab:**
+- Live GitHub data fetched client-side (no server proxy) on first tab open, cached for the session
+- Stars, forks, last push date
+- Open issues (top 5, with labels, linking to GitHub issues page)
+- Open PRs (top 5, linking to GitHub pulls page)
+- Top 5 contributors with avatars
 
-**Why this works:**
-- Demo experience is instant and zero-friction (tier 1)
-- Power users who want their own repos can self-serve (tier 2)
-- We never run out of quota on the server key
+**Chat:**
+- User messages: right-aligned pill bubble
+- Assistant messages: left-aligned, markdown rendered (GFM)
+- Streaming via SSE — cursor blinks while response arrives
+- Rate limit nudge: banner appears only on Gemini quota errors, prompts to add own key
 
----
+**Dark mode:**
+- Follows system `prefers-color-scheme` by default
+- Manual toggle (☾ / ☀) in the nav on RepoPage, top-right corner on LandingPage
+- Preference persisted in `localStorage` under key `"theme"`
+- Implemented via `data-theme="dark"` on `<html>` and CSS custom properties — zero JS overhead per render
 
-## Frontend UX decisions (Phase 9)
-
-**Landing page:**
-- Hero: short tagline + GitHub URL input box
-- Below input: 6 clickable example repo cards (name, one-line description, est. time)
-- Clicking a card fills the URL input — user still hits "Explore" so they feel in control
-- No API key field on landing — only shown when they try a non-example repo
-
-**Ingestion flow:**
-- Show a live progress stepper: `Fetching files → Chunking → Embedding (12/150) → Ready`
-- Before ingestion starts, use the file count from the GitHub tree response to show
-  "~2 min" estimate upfront — no surprises
-- Progress streamed via SSE (requires a new `POST /api/repos/:id/progress` SSE endpoint,
-  or fold it into the existing ingest route)
-
-**Repo overview page (after ingestion):**
-- Tech stack badges (Express, TypeScript, etc.)
-- Folder tree explorer (collapsible)
-- Architecture summary paragraph (LLM-generated, runs once on ingest)
-- Tab bar: Overview / Chat / Change Guide
-
-**Chat tab:**
-- Simple message thread — user types, streamed answer appears word by word
-- Show which files were used as context (source citations under each answer)
-- Suggested starter questions based on the repo (LLM-generated on ingest)
-
-**Change Guide tab:**
-- Text area: "Describe the change you want to make"
-- Output: a card per file — file path, why it needs changing, what to do
+**Footer:**
+- Always visible on both pages: Built by · GitHub · LinkedIn · X

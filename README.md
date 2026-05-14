@@ -1,83 +1,102 @@
 # RepoGrok
 
-AI-powered codebase explainer. Paste a GitHub URL and get an interactive overview, architecture summary, and a chat interface to ask questions about any JS/TS codebase.
+AI-powered codebase explainer. Paste a GitHub URL and get an interactive overview, tech stack breakdown, repo health metrics, and a chat interface to ask questions about any JS/TS codebase.
 
 ## How it works
 
-1. Fetches all JS/TS files from a public GitHub repo
-2. Parses files into semantic chunks (functions, components, hooks, classes, types) using Babel AST
-3. Converts chunks to vector embeddings via Gemini
-4. On each question, retrieves the most relevant chunks via cosine similarity and sends only those to the LLM — not the whole codebase
+1. Downloads the repo as a zip via GitHub API (one HTTP call)
+2. Parses files into semantic chunks — functions, components, hooks, classes, types — using Babel AST
+3. Converts chunks to vector embeddings locally via `all-MiniLM-L6-v2` (no API quota)
+4. On each question, retrieves the most relevant chunks via cosine similarity and sends only those to Gemini — not the whole codebase (RAG)
 
 ## Prerequisites
 
 - Node.js 18+
-- A free [Gemini API key](https://aistudio.google.com/apikey)
-- A GitHub personal access token (optional — raises rate limit from 60 to 5000 req/hr)
+- A free [Gemini API key](https://aistudio.google.com/apikey) — only needed for chat, not for indexing
+- A GitHub personal access token (optional — raises API rate limit from 60 to 5000 req/hr)
 
 ## Setup
 
 ```bash
-# Install server dependencies
+# Server
 cd server && npm install
+cp .env.example .env   # fill in your keys
 
-# Copy env template and fill in your keys
-cp .env.example .env
+# Client
+cd client && npm install
 ```
 
-`.env` fields:
+### Environment variables
+
+**`server/.env`**
 
 | Key | Required | Description |
 |-----|----------|-------------|
-| `GEMINI_API_KEY` | Yes | From aistudio.google.com |
-| `GITHUB_TOKEN` | No | GitHub PAT with `public_repo` read scope |
+| `GEMINI_API_KEY` | For chat | From aistudio.google.com — not needed for indexing |
+| `GITHUB_TOKEN` | Recommended | GitHub PAT with `public_repo` read scope |
+| `CLIENT_URL` | Prod only | Frontend origin for CORS (default: `http://localhost:5173`) |
+
+**`client/.env`** (create if deploying)
+
+| Key | Description |
+|-----|-------------|
+| `VITE_API_URL` | Backend URL (default: `http://localhost:3001`) |
 
 ## Run
 
 ```bash
-# Development
+# Terminal 1 — backend
 cd server && npm run dev
+
+# Terminal 2 — frontend
+cd client && npm run dev
 ```
 
-Server runs on `http://localhost:3001`.
+Frontend: `http://localhost:5173` · Backend: `http://localhost:3001`
 
-## Example repos to try
+## Features
 
-These are good starting points — small enough to finish quickly, well-known enough to ask interesting questions about:
+- **Overview tab** — file count, lines of code, dependencies, tech stack badges, collapsible folder tree
+- **Pulse tab** — live GitHub data: stars, forks, last push, open issues, open PRs, top contributors
+- **Chat** — ask anything about the codebase; answers are grounded in actual source chunks
+- **Dark mode** — follows system preference, manual toggle persisted in localStorage
 
-| Repo | Est. time | Good questions to ask |
-|------|-----------|----------------------|
-| [`immerjs/immer`](https://github.com/immerjs/immer) | ~30s | How does produce() work under the hood? How are drafts tracked? |
-| [`reduxjs/redux`](https://github.com/reduxjs/redux) | ~30s | How does createStore work? How does middleware compose? |
-| [`pmndrs/zustand`](https://github.com/pmndrs/zustand) | ~45s | How is the store created? How does the React binding work? |
-| [`vercel/swr`](https://github.com/vercel/swr) | ~45s | How does cache invalidation work? How are concurrent requests deduplicated? |
-| [`axios/axios`](https://github.com/axios/axios) | ~1 min | How are interceptors implemented? How does request cancellation work? |
-| [`colinhacks/zod`](https://github.com/colinhacks/zod) | ~2 min | How does schema parsing work? How are errors collected? |
+## Example repos
 
-> **Tip:** Repos under ~100 files finish in under a minute. Large monorepos (React, Next.js) can take 5–10 minutes due to the free-tier embedding limit of 100 requests/min.
+| Repo | Good questions |
+|------|----------------|
+| [`reduxjs/redux`](https://github.com/reduxjs/redux) | How does createStore work? How does middleware compose? |
+| [`axios/axios`](https://github.com/axios/axios) | How are interceptors implemented? How does cancellation work? |
+| [`colinhacks/zod`](https://github.com/colinhacks/zod) | How does schema parsing work? How are errors collected? |
+| [`pmndrs/zustand`](https://github.com/pmndrs/zustand) | How is the store created? How does the React binding work? |
+| [`immerjs/immer`](https://github.com/immerjs/immer) | How does produce() work? How are drafts tracked? |
 
 ## API
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/repos` | Ingest a GitHub repo |
-| `GET` | `/api/repos/:id/overview` | Get repo overview + tech stack |
-| `POST` | `/api/repos/:id/query` | Ask a question about the repo |
-| `POST` | `/api/repos/:id/change-guide` | Describe a change, get file-level guidance |
+| `GET` | `/api/repos/:id/overview` | Repo metadata + tech stack |
+| `POST` | `/api/repos/:id/query` | Ask a question (SSE streamed) |
+| `GET` | `/health` | Health check |
 
 ## Project docs
 
 - [`NOTES.md`](./NOTES.md) — architectural decisions and the reasoning behind them
 - [`IDEAS.md`](./IDEAS.md) — future features and upgrade paths
 
+## Tech stack
+
+| Layer | Tech |
+|-------|------|
+| Frontend | React + TypeScript + Vite |
+| Backend | Node.js + Express + TypeScript |
+| AST parsing | Babel (`@babel/parser`, `@babel/traverse`) |
+| Embeddings | `@xenova/transformers` — `all-MiniLM-L6-v2`, runs locally |
+| LLM | Gemini 2.0 Flash (free tier) |
+| Vector search | In-memory cosine similarity |
+| GitHub API | Octokit + direct zipball download |
+
 ## License
 
 MIT
-
-## Tech stack
-
-- **Backend:** Node.js + Express + TypeScript
-- **AST parsing:** Babel
-- **Embeddings + LLM:** Gemini (`text-embedding-004` + `gemini-2.0-flash`)
-- **Vector search:** In-memory cosine similarity
-- **GitHub API:** Octokit
