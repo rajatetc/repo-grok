@@ -16,7 +16,7 @@ function isRateLimitError(msg: string) {
 }
 
 export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
-  const { messages, addMessage, appendToLastMessage, setLastMessageSources, geminiKey, metadata } = useRepoStore();
+  const { messages, addMessage, appendToLastMessage, geminiKey } = useRepoStore();
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [showKeyNudge, setShowKeyNudge] = useState(false);
@@ -61,7 +61,6 @@ export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
         setStreaming(false);
         if (isRateLimitError(err) && !geminiKey) setShowKeyNudge(true);
       },
-      (sources) => setLastMessageSources(sources)
     );
   }
 
@@ -86,22 +85,6 @@ export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                 </div>
                 {streaming && i === messages.length - 1 && <span className={styles.cursor} />}
-                {msg.sources && msg.sources.length > 0 && (
-                  <div className={styles.sources}>
-                    {msg.sources.map((path) => (
-                      <a
-                        key={path}
-                        href={`https://github.com/${metadata?.owner}/${metadata?.repo}/blob/${metadata?.branch}/${path}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={styles.sourceChip}
-                        title={path}
-                      >
-                        {path.split("/").slice(-2).join("/")}
-                      </a>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
           </div>

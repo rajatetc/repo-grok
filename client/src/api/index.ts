@@ -120,8 +120,7 @@ export function streamQuery(
   history: { role: "user" | "assistant"; content: string }[],
   onChunk: (text: string) => void,
   onDone: () => void,
-  onError: (msg: string) => void,
-  onSources?: (sources: string[]) => void
+  onError: (msg: string) => void
 ): () => void {
   const controller = new AbortController();
 
@@ -159,11 +158,6 @@ export function streamQuery(
           const raw = line.slice(6);
           if (pendingEvent === "done") { onDone(); return; }
           if (pendingEvent === "error") { onError(raw || "Stream error from server."); return; }
-          if (pendingEvent === "sources") {
-            try { onSources?.(JSON.parse(raw)); } catch { /* ignore malformed */ }
-            pendingEvent = "";
-            continue;
-          }
           onChunk(raw.replace(/\\n/g, "\n").replace(/\\r/g, "\r"));
           pendingEvent = "";
         } else if (line === "") {

@@ -267,8 +267,6 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
     }
 
     if (!clientClosed) {
-      const sources = [...new Set(results.map((r) => r.chunk.filePath))];
-      res.write(`event: sources\ndata: ${JSON.stringify(sources)}\n\n`);
       res.write(`event: done\ndata: \n\n`);
       res.end();
     }
