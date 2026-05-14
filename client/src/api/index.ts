@@ -1,6 +1,5 @@
 import type { RepoMetadata } from "../types";
 import { API_BASE } from "../constants";
-import { useRepoStore } from "../store/useRepoStore";
 
 export type IngestProgress =
   | { stage: "fetch" }
@@ -85,13 +84,13 @@ export function streamQuery(
   history: { role: "user" | "assistant"; content: string }[],
   onChunk: (text: string) => void,
   onDone: () => void,
-  onError: (msg: string) => void
+  onError: (msg: string) => void,
+  geminiKey?: string | null
 ): () => void {
   const controller = new AbortController();
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const key = useRepoStore.getState().geminiKey;
-  if (key) headers["X-Gemini-Key"] = key;
+  if (geminiKey) headers["X-Gemini-Key"] = geminiKey;
 
   fetch(`${API_BASE}/api/repos/${repoId}/query`, {
     method: "POST",
@@ -123,7 +122,7 @@ export function streamQuery(
           const raw = line.slice(6);
           if (pendingEvent === "done") { onDone(); return; }
           if (pendingEvent === "error") { onError(raw || "Stream error from server."); return; }
-          onChunk(raw.replace(/\\n/g, "\n").replace(/\\r/g, "\r"));
+          onChunk(JSON.parse(raw));
           pendingEvent = "";
         } else if (line === "") {
           pendingEvent = "";

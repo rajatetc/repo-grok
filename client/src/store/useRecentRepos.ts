@@ -4,6 +4,7 @@ const STORAGE_KEY = "repogrok-recent";
 const MAX_RECENT = 5;
 
 export interface RecentRepo {
+  repoId: string;
   owner: string;
   repo: string;
   url: string;

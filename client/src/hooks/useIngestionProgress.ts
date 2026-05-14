@@ -12,7 +12,10 @@ export function useIngestionProgress() {
     if (p.stage === "fetch") {
       setState({ percent: 15, message: "Fetching repository…", stage: "fetch" });
     } else if (p.stage === "chunk") {
-      setState({ percent: 30, message: `Parsed ${p.total.toLocaleString()} chunks…`, stage: "chunk" });
+      const msg = "total" in p && p.total
+        ? `Parsed ${p.total.toLocaleString()} chunks…`
+        : "Parsing code…";
+      setState({ percent: 30, message: msg, stage: "chunk" });
     } else if (p.stage === "embed") {
       const pct = 30 + Math.round((p.done / p.total) * 60);
       setState({ percent: pct, message: `Embedding ${p.done.toLocaleString()} / ${p.total.toLocaleString()} chunks…`, stage: "embed" });

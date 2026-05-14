@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useRepoStore } from "../store/useRepoStore";
+import { API_BASE } from "../constants";
 import ThemeToggle from "../components/ThemeToggle";
 import OverviewTab from "../components/OverviewTab";
 import PulseTab from "../components/PulseTab";
@@ -11,22 +12,31 @@ import styles from "./RepoPage.module.css";
 export default function RepoPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { metadata, geminiKey, setGeminiKey, chunkWarning, setChunkWarning } = useRepoStore();
+  const { metadata, geminiKey, setGeminiKey, setReady, chunkWarning, setChunkWarning } = useRepoStore();
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [keyInput, setKeyInput]         = useState("");
   const [activeTab, setActiveTab]       = useState<"overview" | "pulse">("overview");
+  const [loading, setLoading]           = useState(!metadata || metadata.id !== id);
 
   useEffect(() => {
-    if (!id || !metadata || metadata.id !== id) {
-      navigate("/", { replace: true });
-    }
+    if (!id) { navigate("/", { replace: true }); return; }
+    if (metadata && metadata.id === id) { setLoading(false); return; }
+
+    fetch(`${API_BASE}/api/repos/${id}/overview`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data) => { setReady(id, data); setLoading(false); })
+      .catch(() => navigate("/", { replace: true }));
   }, [id]);
 
   function openKeyModal() { setKeyInput(geminiKey ?? ""); setShowKeyModal(true); }
   function saveKey()      { setGeminiKey(keyInput.trim() || null); setShowKeyModal(false); }
   function removeKey()    { setGeminiKey(null); setKeyInput(""); setShowKeyModal(false); }
 
-  if (!metadata || metadata.id !== id) return null;
+  if (loading || !metadata) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "var(--text-muted)", fontSize: 14 }}>
+      Loading…
+    </div>
+  );
 
   return (
     <div className={styles.page}>

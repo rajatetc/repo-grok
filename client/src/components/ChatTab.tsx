@@ -71,6 +71,7 @@ export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
         setStreaming(false);
         if (isRateLimitError(err) && !geminiKey) setShowKeyNudge(true);
       },
+      geminiKey,
     );
   }
 

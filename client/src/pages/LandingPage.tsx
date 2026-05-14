@@ -64,7 +64,7 @@ export default function LandingPage() {
       (repoId, metadata) => {
         onDone();
         setReady(repoId, metadata);
-        addRecent({ owner: metadata.owner, repo: metadata.repo, url: url.trim() });
+        addRecent({ repoId, owner: metadata.owner, repo: metadata.repo, url: url.trim() });
         setTimeout(() => navigate(`/repo/${repoId}`), 300);
       },
       (err) => setError(err),
@@ -153,7 +153,7 @@ export default function LandingPage() {
                 key={r.url}
                 className={styles.chip}
                 disabled={isLoading}
-                onClick={() => setUrl(r.url)}
+                onClick={() => navigate(`/repo/${r.repoId}`)}
               >
                 {r.owner}/{r.repo}
               </button>
