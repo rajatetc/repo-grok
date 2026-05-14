@@ -287,6 +287,26 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
     const topScores = results.slice(0, 3).map((r) => r.score.toFixed(2)).join(", ");
     console.log(`Query "${query.slice(0, 60)}${query.length > 60 ? "…" : ""}" → ${results.length} chunks, top scores: [${topScores}]`);
 
+    // Source citations: surface which files the answer is drawn from so the
+    // user can jump straight to GitHub. Dedupe by filePath (multiple chunks
+    // from the same file collapse to one chip).
+    const seenFiles = new Set<string>();
+    const sources = [];
+    for (const r of results) {
+      if (seenFiles.has(r.chunk.filePath)) continue;
+      seenFiles.add(r.chunk.filePath);
+      sources.push({
+        filePath: r.chunk.filePath,
+        startLine: r.chunk.startLine,
+        endLine: r.chunk.endLine,
+        type: r.chunk.type,
+        name: r.chunk.name,
+      });
+    }
+    if (sources.length > 0) {
+      res.write(`event: sources\ndata: ${JSON.stringify(sources)}\n\n`);
+    }
+
     for await (const textChunk of streamAnswer(query, results, metadata, safeHistory)) {
       if (clientClosed) return;
       res.write(`data: ${JSON.stringify(textChunk)}\n\n`);
