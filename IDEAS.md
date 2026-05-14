@@ -10,6 +10,7 @@
 - [Auth + usage limits](#auth--usage-limits)
 - [Multi-model support](#multi-model-support)
 - [Embedding model worker threads](#embedding-model-worker-threads)
+- [Cron-refresh pre-baked seeds](#cron-refresh-pre-baked-seeds-via-github-actions)
 - [Private repo support](#private-repo-support)
 - [More languages](#more-languages)
 - [Vector database at scale](#vector-database-when-scale-demands-it)
@@ -91,22 +92,37 @@ Current state: fake progress bar with hardcoded time checkpoints.
 ---
 
 ## Multi-Model Support
-- Swap embedding/LLM model per user preference: local MiniLM (default), OpenAI, Gemini API
+- Swap embedding/LLM model per user preference: Cloudflare BGE (default), OpenAI, Cohere
 - Abstraction lives in `embeddings.ts` + `llm.ts` — only those two files need changing
-- **Blocker:** embedding dimensions differ per provider (local=384, Gemini=768, OpenAI=1536),
+- **Blocker:** embedding dimensions differ per provider (Cloudflare BGE=384, OpenAI=1536),
   so vectors from different models can't be mixed in the same store
 
 ---
 
 ## Embedding Model Worker Threads
-The model singleton runs on the main thread. Two concurrent calls (e.g. query + ingest) can race
-on internal tensor state.
+*Stale — embeddings are now a remote API call (Cloudflare Workers AI), so there's no in-process model to worry about. Keeping the entry for context: when we were using `@xenova/transformers` locally, the model singleton ran on the main thread, and two concurrent calls could race on internal tensor state. Not relevant under the current architecture.*
 
-**Short-term:** single-slot async queue — safe, zero complexity.
+---
 
-**Proper fix:** run `@xenova/transformers` in `worker_threads`. Spawn N workers (CPU cores - 1),
-each with its own model instance. Main thread sends batches via `postMessage`. ~100 lines for the
-pool + messaging protocol.
+## Cron-refresh pre-baked seeds via GitHub Actions
+
+**Current:** example repo seeds (`server/seeds/*.json`) are committed once and only refreshed when someone runs `npm run prebake` locally and commits the result. Over time the seeds drift — the live repo gets new functions, refactors, etc., but our embeddings are frozen.
+
+**Why this is fine for now:** the three example repos (redux, express, axios) are mature and low-velocity. Their public APIs haven't meaningfully shifted in years. Embeddings stay ~90% accurate for 12+ months.
+
+**When it would matter:** if we add fast-moving example repos (e.g. a Next.js demo, a current React app) or want the demo to always reflect *today's* code.
+
+**Why cron-job.org pinging a refresh endpoint doesn't work:** Render's filesystem is ephemeral. Refreshed seeds would live in memory only and revert to the (stale) committed JSONs on every restart, sleep cycle, or deploy. Worst of both worlds.
+
+**Real fix: GitHub Actions weekly cron.**
+1. `.github/workflows/refresh-seeds.yml` runs `npm run prebake` on a schedule
+2. `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_AI_TOKEN` stored in GitHub Secrets
+3. Auto-commit updated `server/seeds/*.json` back to `main`
+4. Render auto-deploys on push → fresh seeds, persisted, no manual step
+
+~30 lines of YAML, plus repo write permission for the workflow. Cost: negligible — Cloudflare free tier handles 10K neurons/day.
+
+**See also:** [Pre-baked seeds](./NOTES.md#pre-baked-seeds-for-example-repos) for the static current implementation.
 
 ---
 

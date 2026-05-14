@@ -7,26 +7,29 @@ A web app that helps developers understand unfamiliar codebases. Paste a GitHub 
 1. User pastes a public GitHub repo URL
 2. App downloads the repo as a zip (one HTTP call via Octokit)
 3. Files are parsed into an AST using Babel, chunked by semantic boundaries (functions, classes, components, hooks, types)
-4. Chunks are converted to vector embeddings locally via `all-MiniLM-L6-v2` (no API quota used)
+4. Chunks are embedded via Cloudflare Workers AI (`bge-small-en-v1.5`, 384-dim) — free tier, no LLM quota used
 5. Embeddings stored in-memory with cosine similarity search
 6. Overview tab: tech stack detection, folder structure, file/LOC stats
 7. Pulse tab: live GitHub data (stars, forks, issues, PRs, contributors) fetched client-side
 8. User can ask questions → RAG retrieves relevant chunks → sends only those to Gemini LLM → streams response
 
 ## Tech Stack
-- **Frontend:** React + TypeScript + Vite
-- **Backend:** Node.js + Express + TypeScript
-- **AST Parser:** Babel (`@babel/parser`, `@babel/traverse`) for semantic chunking
-- **Embeddings:** `@xenova/transformers` — `all-MiniLM-L6-v2`, runs locally, zero API cost
-- **LLM:** Gemini 2.0 Flash (free tier) — only used for chat answers
-- **Vector Search:** In-memory cosine similarity
-- **GitHub API:** Octokit + direct zipball download
+
+| Layer | Tech | Notes |
+|-------|------|-------|
+| Frontend | React + TypeScript + Vite | |
+| Backend | Node.js + Express + TypeScript | |
+| AST Parser | Babel (`@babel/parser`, `@babel/traverse`) | Semantic chunking |
+| Embeddings | Cloudflare Workers AI — `bge-small-en-v1.5` | 384-dim, free tier, remote API |
+| LLM | Gemini 2.5 Flash (free tier) | Chat answers only |
+| Vector Search | In-memory cosine similarity | Linear scan, ~10ms for <10k chunks |
+| GitHub API | Octokit + direct zipball download | |
 
 ## Architecture Pipeline
 
 ```
 Repo URL → GitHub zipball → Babel AST Parser (chunk by fn/class/component)
-→ Local embeddings (all-MiniLM-L6-v2) → In-memory Vector Store
+→ Cloudflare Workers AI embeddings (bge-small-en-v1.5) → In-memory Vector Store
 → User Query → Embed query → Cosine similarity (find top-k chunks)
 → Send relevant chunks + query to Gemini LLM → Stream response to UI
 ```
@@ -43,7 +46,15 @@ Repo URL → GitHub zipball → Babel AST Parser (chunk by fn/class/component)
 - Chunk by semantic units: functions, React components, custom hooks, classes, type definitions
 - Large chunks split at logical boundaries (empty lines, closing braces)
 - Fallback to line-based splitting if AST parsing fails
-- Chunk types: component (PascalCase fns), hook (use* fns), function, class, type/interface
+### Chunk Types
+
+| Type | Detection Rule |
+|------|----------------|
+| `component` | PascalCase exported functions returning JSX |
+| `hook` | Functions starting with `use` |
+| `function` | All other named functions |
+| `class` | Class declarations |
+| `type` | TypeScript type/interface declarations |
 
 ### Scope for MVP
 - JS/TS repos only (React/frontend repos as primary target)
@@ -55,11 +66,15 @@ Repo URL → GitHub zipball → Babel AST Parser (chunk by fn/class/component)
 - Config file patterns as a second signal (e.g. `tailwind.config.*`, `vite.config.*`, `schema.prisma`)
 
 ### GitHub Repo Fetching
-- Download full repo as a zip (one HTTP call) — avoids N+1 API requests of per-file fetching
-- Filter to `.js/.jsx/.ts/.tsx/.html/.css/.vue/.svelte` + `package.json`
-- Ignore: `node_modules`, `dist`, `build`, `.next`, lock files — using path segment matching
-- Skip files > 500KB (generated/minified); cap total extracted bytes at 150MB (zip bomb protection)
-- 60s timeout on the download
+
+| Setting | Value | Reason |
+|---------|-------|--------|
+| Download method | Single zipball | Avoids N+1 per-file API calls |
+| Allowed extensions | `.js/.jsx/.ts/.tsx/.html/.css/.vue/.svelte` + `package.json` | |
+| Ignored paths | `node_modules`, `dist`, `build`, `.next`, lock files | Path segment matching |
+| Max file size | 500 KB | Skip generated/minified files |
+| Max extracted bytes | 150 MB | Zip bomb protection |
+| Download timeout | 60s | |
 
 ### Repo Pulse
 - Live GitHub data fetched directly from `api.github.com` on the client (no CORS issues, public endpoints)
@@ -74,7 +89,7 @@ repo-grok/
 │   │   ├── services/
 │   │   │   ├── github.ts       # Zipball downloader, URL parser, folder tree builder
 │   │   │   ├── chunker.ts      # Babel AST chunker — semantic splitting
-│   │   │   ├── embeddings.ts   # Local transformer model (all-MiniLM-L6-v2)
+│   │   │   ├── embeddings.ts   # Cloudflare Workers AI (bge-small-en-v1.5)
 │   │   │   ├── vectorStore.ts  # In-memory cosine similarity search
 │   │   │   └── llm.ts          # Gemini Flash — streaming RAG answers
 │   │   ├── utils/

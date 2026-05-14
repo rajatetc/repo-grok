@@ -2,7 +2,7 @@
 
 ## Contents
 - [In-memory vector store](#why-in-memory-vector-store-instead-of-a-vector-db)
-- [Local embeddings instead of Gemini](#why-local-embeddings-instead-of-gemini-api)
+- [Embedding model evolution](#embedding-model-evolution-gemini--local-xenova--cloudflare-workers-ai)
 - [No model abstraction layer yet](#why-no-model-abstraction-layer-yet)
 - [Embedding context enrichment](#why-embeddings-include-file-path--chunk-type-not-just-raw-code)
 - [Tech stack detection](#why-tech-stack-detection-is-deterministic-not-llm-based)
@@ -41,28 +41,30 @@ for no measurable gain at this scale. The entire store lives in a `Map<repoId, C
 
 ---
 
-## Why local embeddings instead of Gemini API
-Originally used `gemini-embedding-001` (768-dim, 100 RPM / 1000 req/day free tier).
-A 150-chunk repo took ~2 min; a 500-chunk repo ~10 min — and re-indexing the same examples
-on every restart burned through the daily quota within minutes.
+## Embedding model evolution: Gemini → Local Xenova → Cloudflare Workers AI
 
-Switched to `@xenova/transformers` running `Xenova/all-MiniLM-L6-v2` locally:
-- **23MB one-time download**, cached on disk after first run
-- **384-dimensional** vectors, cosine similarity works the same way
-- **Zero API calls** for indexing — no quota, no rate limits, no billing
-- **No GEMINI_API_KEY required** to run the server or pre-bake seeds
-- Model loads once into the process on startup (promise-cached singleton), shared by all requests
+| Phase | Provider | Dims | Pros | Cons | Status |
+|-------|----------|------|------|------|--------|
+| 1 | Gemini `embedding-001` | 768 | Managed API | 100 RPM / 1K req/day free tier; 150-chunk repo took ~2 min; daily quota burned in minutes on restarts | Removed |
+| 2 | Local `Xenova/all-MiniLM-L6-v2` | 384 | Zero API calls, zero cost | ~250MB RAM (ONNX), required aggressive tuning (`BATCH=16`, `--max-old-space=400`, `MAX_REPOS=5`), ~30s cold start | Removed |
+| 3 | Cloudflare Workers AI `bge-small-en-v1.5` | 384 | 10K neurons/day free, 3000 RPM, 100 texts/batch, zero local RAM | External API dependency (network latency) | **Current** |
 
-Gemini is still used for one thing only: the LLM (`gemini-2.5-flash`) that reads retrieved chunks
-and answers questions. That's a much lower call volume (one per user question, not one per chunk).
+### Why Phase 3 won
+- Same 384-dim as Phase 2 — vector store unchanged, no re-indexing needed
+- ~250MB freed from ONNX → `MAX_REPOS` raised to 20, no `NODE_OPTIONS` tuning needed
+- Cold start is now ~10–15s (just Express + seed loading, no model init)
+- Retry with exponential backoff on 429s built into `callCloudflare()`
 
-**Trade-off:** local inference is CPU-bound. On a cold server the first embedding takes ~1–2s
-while the model warms up. Subsequent chunks are fast (~5–20ms each).
+**Trade-off:** indexing now depends on an external API (network latency + availability).
+The Cloudflare free tier is generous enough that rate limits haven't been an issue in practice.
+
+**Impact on deployment:** with ~250MB freed from ONNX, `MAX_REPOS` can be raised (now 20),
+and `NODE_OPTIONS` / batch size tuning from Phase 2 is no longer needed.
 
 ---
 
 ## Why no model abstraction layer yet
-Embedding dimensions differ across providers (local MiniLM=384, Gemini=768, OpenAI=1536).
+Embedding dimensions differ across providers (Cloudflare BGE=384, OpenAI=1536).
 Building a proper adapter means normalizing dimensions, streaming formats, rate limits, and
 error codes. Not worth it until there's a second provider to support.
 
@@ -144,7 +146,7 @@ Two limiters:
 ## Deployment strategy
 - **Backend** (Express, stateful) → Render Web Service free tier: 512MB RAM, 0.1 CPU, sleeps after 15min idle.
 - **Frontend** (React/Vite, static) → Vercel free tier: edge CDN.
-- `GEMINI_API_KEY`, `GITHUB_TOKEN`, `CLIENT_URL` go in Render's dashboard. Frontend's `VITE_API_URL` goes in Vercel's.
+- `GEMINI_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_TOKEN`, `GITHUB_TOKEN`, `CLIENT_URL` go in Render's dashboard. Frontend's `VITE_API_URL` goes in Vercel's.
 - `NODE_ENV` is set in the **Start Command** (`NODE_ENV=production npm start`), not as a Render env var. Setting it as an env var would apply during `npm install` too and skip `devDependencies` — which the TypeScript build step needs (tsc, @types/*, etc).
 
 **Why Render over Railway/Fly:**
@@ -196,7 +198,7 @@ Specifically, `express-rate-limit` v7 throws `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
 
 ## cron-job.org keepalive instead of paying to stay warm
 
-Render free tier sleeps the service after 15 minutes of zero HTTP traffic. Waking it cold-loads the embedding model (~30s) and shows the first visitor a spinning page — bad portfolio impression.
+Render free tier sleeps the service after 15 minutes of zero HTTP traffic. Waking it takes ~10–15s (Express startup + seed loading) — shows the first visitor a spinning page.
 
 **Options considered:**
 - Pay $7/mo for Render Starter (always-on). Defeats the "free tier" goal.

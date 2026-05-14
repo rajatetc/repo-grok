@@ -11,13 +11,14 @@ AI-powered codebase explainer. Paste a GitHub URL and get an interactive overvie
 
 1. Downloads the repo as a zip via GitHub API (one HTTP call)
 2. Parses files into semantic chunks — functions, components, hooks, classes, types — using Babel AST
-3. Converts chunks to vector embeddings on the server via `all-MiniLM-L6-v2` — no LLM API quota used for indexing
+3. Converts chunks to 384-dim vector embeddings via Cloudflare Workers AI (`bge-small-en-v1.5`) — free tier, no LLM quota used
 4. On each question, retrieves the most relevant chunks via cosine similarity and sends only those to Gemini — not the whole codebase (RAG)
 
 ## Prerequisites
 
 - Node.js 22+
 - A free [Gemini API key](https://aistudio.google.com/apikey) — only needed for chat, not for indexing
+- A [Cloudflare Workers AI](https://dash.cloudflare.com/) account (free tier) — for embedding during ingestion
 - A GitHub personal access token (optional — raises API rate limit from 60 to 5000 req/hr)
 
 ## Setup
@@ -38,6 +39,8 @@ cd client && npm install
 | Key | Required | Description |
 |-----|----------|-------------|
 | `GEMINI_API_KEY` | For chat | From aistudio.google.com — not needed for indexing |
+| `CLOUDFLARE_ACCOUNT_ID` | For indexing | From Cloudflare dashboard |
+| `CLOUDFLARE_AI_TOKEN` | For indexing | Workers AI API token |
 | `GITHUB_TOKEN` | Recommended | GitHub PAT with `public_repo` read scope |
 | `CLIENT_URL` | Prod only | Frontend origin for CORS (default: `http://localhost:5173`) |
 
@@ -106,6 +109,8 @@ The live app runs on free tiers across three services:
 | Key | Notes |
 |-----|-------|
 | `GEMINI_API_KEY` | Required for chat |
+| `CLOUDFLARE_ACCOUNT_ID` | Required for indexing |
+| `CLOUDFLARE_AI_TOKEN` | Required for indexing |
 | `GITHUB_TOKEN` | Optional but recommended (60→5000 req/hr) |
 | `CLIENT_URL` | Vercel URL, for CORS |
 
@@ -125,7 +130,7 @@ The live app runs on free tiers across three services:
 
 ### Keepalive → cron-job.org
 
-Render's free tier sleeps the service after 15 minutes of idle traffic, and waking it cold-loads the embedding model (~30s). A free cron-job.org cron pings `/health` every 14 minutes (`*/14 * * * *`) so the server stays warm.
+Render's free tier sleeps the service after 15 minutes of idle traffic, and a cold start takes ~10–15s. A free cron-job.org cron pings `/health` every 14 minutes (`*/14 * * * *`) so the server stays warm.
 
 Render's free monthly budget is 750 hours — continuous uptime is 720, so a single always-warm service stays under the cap.
 
@@ -136,7 +141,7 @@ Render's free monthly budget is 750 hours — continuous uptime is 720, so a sin
 | Frontend | React + TypeScript + Vite |
 | Backend | Node.js + Express + TypeScript |
 | AST parsing | Babel (`@babel/parser`, `@babel/traverse`) |
-| Embeddings | `@xenova/transformers` — `all-MiniLM-L6-v2`, runs on the server (no LLM API used) |
+| Embeddings | Cloudflare Workers AI — `bge-small-en-v1.5` (384-dim, free tier) |
 | LLM | Gemini 2.5 Flash (free tier) |
 | Vector search | In-memory cosine similarity |
 | GitHub API | Octokit + direct zipball download |
