@@ -74,10 +74,16 @@ export default function ChatTab({ repoId }: Props) {
     );
   }
 
-  function blobUrl(filePath: string, startLine: number, endLine: number): string {
+  function blobUrl(filePath: string): string {
     if (!metadata) return "#";
     const { owner, repo, branch } = metadata;
-    return `https://github.com/${owner}/${repo}/blob/${branch}/${filePath}#L${startLine}-L${endLine}`;
+    return `https://github.com/${owner}/${repo}/blob/${branch}/${filePath}`;
+  }
+
+  // Show the last two segments of the path so files with the same basename
+  // (a `server.js` under tests/ vs examples/) stay distinguishable as chips.
+  function shortPath(filePath: string): string {
+    return filePath.split("/").slice(-2).join("/");
   }
 
   function handleSubmit(e: FormEvent) {
@@ -120,19 +126,19 @@ export default function ChatTab({ repoId }: Props) {
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                 </div>
                 {streaming && i === messages.length - 1 && <span className={styles.cursor} />}
-                {msg.sources && msg.sources.length > 0 && (
+                {msg.sources && msg.sources.length > 0 && !(streaming && i === messages.length - 1) && (
                   <div className={styles.sources}>
                     <span className={styles.sourcesLabel}>Sources</span>
                     {msg.sources.map((s) => (
                       <a
                         key={s.filePath}
-                        href={blobUrl(s.filePath, s.startLine, s.endLine)}
+                        href={blobUrl(s.filePath)}
                         target="_blank"
                         rel="noreferrer"
                         className={styles.sourceChip}
-                        title={`${s.filePath} (lines ${s.startLine}-${s.endLine})`}
+                        title={s.filePath}
                       >
-                        {s.filePath.split("/").pop()}
+                        {shortPath(s.filePath)}
                       </a>
                     ))}
                   </div>
