@@ -44,6 +44,10 @@ if (!process.env.GITHUB_TOKEN) {
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
+// Render terminates TLS in a reverse proxy and forwards X-Forwarded-For.
+// Trust one hop so express-rate-limit reads the real client IP without throwing.
+app.set("trust proxy", 1);
+
 const clientOrigin = process.env.CLIENT_URL ?? "http://localhost:5173";
 if (!process.env.CLIENT_URL) {
   console.warn("WARN: CLIENT_URL not set, defaulting to http://localhost:5173");
@@ -51,7 +55,7 @@ if (!process.env.CLIENT_URL) {
 app.use(cors({ origin: clientOrigin, allowedHeaders: ["Content-Type", "x-gemini-key"] }));
 app.use(express.json({ limit: "100kb" }));
 
-const MAX_REPOS = 50;
+const MAX_REPOS = 5;
 
 // --- Repo metadata store ---
 const repoMetadataStore = new LRUCache<string, RepoMetadata>({ max: MAX_REPOS });

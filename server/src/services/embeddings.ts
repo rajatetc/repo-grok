@@ -2,7 +2,7 @@ import { pipeline, type FeatureExtractionPipeline } from "@xenova/transformers";
 import type { CodeChunk } from "../types/index.js";
 
 // all-MiniLM-L6-v2: 23MB, 384-dim vectors, good semantic similarity.
-// Downloads once on first run and caches locally — no API calls ever.
+// Downloads once on first server boot and stays in memory — no API calls ever.
 const MODEL = "Xenova/all-MiniLM-L6-v2";
 const HIDDEN_SIZE = 384;
 const EMBED_BATCH_SIZE = 64;
@@ -40,7 +40,7 @@ export async function embedChunks(
   chunks: CodeChunk[],
   onProgress?: (done: number, total: number) => void
 ): Promise<CodeChunk[]> {
-  console.log(`Embedding ${chunks.length} chunks locally…`);
+  console.log(`Embedding ${chunks.length} chunks…`);
   const model = await getExtractor();
 
   for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
