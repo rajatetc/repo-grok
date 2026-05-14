@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "vitest run && tsc",
     "start": "node dist/index.js",
     "prebake": "tsx scripts/prebake.ts",
     "test": "vitest run",

@@ -82,4 +82,22 @@ describe("detectTechStack", () => {
     const files: RepoFile[] = [{ path: "package.json", content: "not json {{{", size: 10 }];
     expect(() => detectTechStack(files)).not.toThrow();
   });
+
+  it("ignores devDependency-only packages for runtime categories", () => {
+    // zustand has redux in devDeps for testing its middleware adapter
+    const stack = detectTechStack(pkg({ zustand: "^4.0.0" }, { redux: "^4.0.0" }));
+    expect(stack.stateManagement).toContain("Zustand");
+    expect(stack.stateManagement).not.toContain("Redux");
+  });
+
+  it("detects testing libs from devDependencies", () => {
+    const stack = detectTechStack(pkg({}, { vitest: "^1.0.0", jest: "^29.0.0" }));
+    expect(stack.testing).toContain("Vitest");
+    expect(stack.testing).toContain("Jest");
+  });
+
+  it("detects build tools from devDependencies", () => {
+    const stack = detectTechStack(pkg({}, { vite: "^5.0.0" }));
+    expect(stack.buildTool).toBe("Vite");
+  });
 });

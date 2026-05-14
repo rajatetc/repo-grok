@@ -146,7 +146,8 @@ export function detectTechStack(files: RepoFile[]): TechStack {
     files.find((f) => f.path === "package.json") ??
     files.find((f) => f.path.endsWith("/package.json"));
 
-  let deps = new Set<string>();
+  let prodDeps = new Set<string>();
+  let allDeps = new Set<string>();
   if (pkgFile) {
     try {
       const pkg = JSON.parse(pkgFile.content) as {
@@ -154,10 +155,15 @@ export function detectTechStack(files: RepoFile[]): TechStack {
         devDependencies?: Record<string, string>;
         peerDependencies?: Record<string, string>;
       };
-      deps = new Set([
+      // prodDeps: what the project actually uses at runtime
+      prodDeps = new Set([
         ...Object.keys(pkg.dependencies ?? {}),
-        ...Object.keys(pkg.devDependencies ?? {}),
         ...Object.keys(pkg.peerDependencies ?? {}),
+      ]);
+      // allDeps: includes devDependencies (testing, build tools live here)
+      allDeps = new Set([
+        ...prodDeps,
+        ...Object.keys(pkg.devDependencies ?? {}),
       ]);
     } catch {
       // malformed package.json — proceed with empty deps
@@ -168,17 +174,20 @@ export function detectTechStack(files: RepoFile[]): TechStack {
 
   const stack: TechStack = {};
 
-  const framework = firstMatch(deps, FRAMEWORKS);
+  // Runtime categories: only match on dependencies + peerDependencies
+  const framework = firstMatch(prodDeps, FRAMEWORKS);
   if (framework) stack.framework = framework;
 
-  const state = allMatches(deps, STATE);
+  const state = allMatches(prodDeps, STATE);
   if (state.length) stack.stateManagement = state;
 
-  let styling = allMatches(deps, STYLING);
-  const testing = allMatches(deps, TESTING);
-  let buildTool = firstMatch(deps, BUILD_TOOLS);
-  const backend = allMatches(deps, BACKEND);
-  const other = allMatches(deps, OTHER);
+  let styling = allMatches(prodDeps, STYLING);
+  const backend = allMatches(prodDeps, BACKEND);
+  const other = allMatches(prodDeps, OTHER);
+
+  // Dev categories: testing and build tools legitimately live in devDependencies
+  const testing = allMatches(allDeps, TESTING);
+  let buildTool = firstMatch(allDeps, BUILD_TOOLS);
 
   // Augment with config file signals for things not captured by deps.
   // Only match root-level or one-level-deep config files — a next.config.js

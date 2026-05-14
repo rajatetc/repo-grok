@@ -1,3 +1,3 @@
 export function normalizeUrl(url: string): string {
-  return url.trim().toLowerCase().replace(/\.git$/, "").replace(/\/$/, "");
+  return url.trim().toLowerCase().replace(/\/+$/, "").replace(/\.git$/, "");
 }
