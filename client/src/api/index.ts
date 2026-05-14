@@ -1,36 +1,6 @@
-import axios from "axios";
 import type { RepoMetadata } from "../types";
 import { API_BASE } from "../constants";
 import { useRepoStore } from "../store/useRepoStore";
-
-const client = axios.create({ baseURL: API_BASE });
-
-// Read the in-memory key from the store and attach it to every axios request
-client.interceptors.request.use((config) => {
-  const key = useRepoStore.getState().geminiKey;
-  if (key) config.headers["X-Gemini-Key"] = key;
-  return config;
-});
-
-function extractError(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    const serverMsg: string | undefined = err.response?.data?.error;
-    if (serverMsg) return serverMsg;
-
-    if (!err.response) {
-      return "Cannot reach the server. Make sure it's running on port 3001.";
-    }
-    switch (err.response.status) {
-      case 400: return "Invalid request — check the GitHub URL and try again.";
-      case 404: return "Repo not found or not yet indexed.";
-      case 429: return "Too many requests — wait a moment and try again.";
-      case 500: return "Something went wrong on the server. Try again shortly.";
-      default:  return `Request failed (${err.response.status}). Please try again.`;
-    }
-  }
-  if (err instanceof Error) return err.message;
-  return "An unexpected error occurred.";
-}
 
 export type IngestProgress =
   | { stage: "fetch" }

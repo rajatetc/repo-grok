@@ -47,7 +47,7 @@ export default function LandingPage() {
   const { setIngesting, setReady, setError, setChunkWarning, status, error } = useRepoStore();
   const [url, setUrl] = useState("");
   const isLoading = status === "ingesting";
-  const { percent, message, stage, onProgress, onDone, reset } = useIngestionProgress();
+  const { percent, stage, onProgress, onDone, reset } = useIngestionProgress();
   const cleanupRef = useRef<(() => void) | null>(null);
 
   function handleSubmit(e: FormEvent) {

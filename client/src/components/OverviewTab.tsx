@@ -82,16 +82,6 @@ function TreeNode({ node, depth, openPaths, toggle, baseUrl, branch }: TreeNodeP
   );
 }
 
-function getTopLevelPaths(node: FolderNode): Set<string> {
-  const paths = new Set<string>();
-  if (node.type === "directory" && node.children) {
-    for (const child of node.children) {
-      if (child.type === "directory") paths.add(child.path);
-    }
-  }
-  return paths;
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface Props { metadata: RepoMetadata }
