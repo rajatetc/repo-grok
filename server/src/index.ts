@@ -7,10 +7,14 @@ import type { Request, Response, NextFunction } from "express";
 
 const isDev = process.env.NODE_ENV !== "production";
 
-// In dev: return real error message so you can debug without reading server logs.
-// In prod: return generic message so internals aren't leaked to end users.
 function clientError(err: unknown, fallback: string): string {
-  if (isDev && err instanceof Error) return err.message;
+  if (err instanceof Error) {
+    const msg = err.message;
+    if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("rate limit")) {
+      return "Gemini rate limit reached. Please wait a moment and try again.";
+    }
+    if (isDev) return msg;
+  }
   return fallback;
 }
 
@@ -19,7 +23,7 @@ import { chunkFiles } from "./services/chunker.js";
 import { detectTechStack } from "./utils/techDetector.js";
 import { embedChunks, embedQuery, loadEmbeddingModel } from "./services/embeddings.js";
 import { storeChunks, search, hasRepo } from "./services/vectorStore.js";
-import { streamAnswer, generateChangeGuide } from "./services/llm.js";
+import { streamAnswer } from "./services/llm.js";
 import { loadSeeds } from "./services/seeds.js";
 import { normalizeUrl } from "./utils/normalizeUrl.js";
 import type { RepoMetadata } from "./types/index.js";
@@ -38,7 +42,7 @@ const clientOrigin = process.env.CLIENT_URL ?? "http://localhost:5173";
 if (!process.env.CLIENT_URL) {
   console.warn("WARN: CLIENT_URL not set, defaulting to http://localhost:5173");
 }
-app.use(cors({ origin: clientOrigin }));
+app.use(cors({ origin: clientOrigin, allowedHeaders: ["Content-Type", "x-gemini-key"] }));
 app.use(express.json({ limit: "100kb" }));
 
 // --- Repo metadata store ---
@@ -98,14 +102,40 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
   try {
     const { files, owner, repo, branch, folderTree } = await fetchRepo(url);
 
-    // Chunking and tech detection are independent — run them in parallel.
-    const [chunks, techStack] = await Promise.all([
-      Promise.resolve(chunkFiles(files)),
-      detectTechStack(files),
-    ]);
+    const sourceFiles = files.filter((f) => !f.path.endsWith("package.json"));
+    if (sourceFiles.length === 0) {
+      return res.status(422).json({
+        error: "No supported files found. RepoGrok supports JavaScript, TypeScript, HTML, CSS, Vue, and Svelte files. Python, Go, Rust coming soon.",
+      });
+    }
+
+    const techStack = detectTechStack(files);
+    const chunks = chunkFiles(files);
 
     const embeddedChunks = await embedChunks(chunks);
-    storeChunks(repoId, embeddedChunks);
+
+    // --- Extra stats ---
+    const linesOfCode = sourceFiles.reduce((n, f) => n + f.content.split("\n").length, 0);
+
+    let dependencyCount = 0;
+    let devDependencyCount = 0;
+    const pkgFile = files.find((f) => f.path === "package.json" || /^[^/]+\/package\.json$/.test(f.path));
+    if (pkgFile) {
+      try {
+        const pkg = JSON.parse(pkgFile.content);
+        dependencyCount    = Object.keys(pkg.dependencies    ?? {}).length;
+        devDependencyCount = Object.keys(pkg.devDependencies ?? {}).length;
+      } catch { /* ignore malformed package.json */ }
+    }
+
+    const chunkBreakdown = embeddedChunks.reduce(
+      (acc, c) => {
+        const key = c.type as keyof typeof acc;
+        if (key in acc) acc[key]++;
+        return acc;
+      },
+      { component: 0, hook: 0, function: 0, class: 0, type: 0 }
+    );
 
     const metadata: RepoMetadata = {
       id: repoId,
@@ -113,12 +143,17 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
       owner,
       repo,
       branch,
-      fileCount: files.length,
+      fileCount: sourceFiles.length,
       totalChunks: embeddedChunks.length,
       techStack,
       folderTree,
       ingestedAt: new Date().toISOString(),
+      linesOfCode,
+      dependencyCount,
+      devDependencyCount,
+      chunkBreakdown,
     };
+    storeChunks(repoId, embeddedChunks);
     repoMetadataStore.set(repoId, metadata);
     urlCache.set(normalized, repoId);
 
@@ -174,11 +209,13 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
     clientClosed = true;
   });
 
+  const userApiKey = req.headers["x-gemini-key"] as string | undefined;
+
   try {
     const queryVector = await embedQuery(query);
     const results = search(repoId, queryVector);
 
-    for await (const textChunk of streamAnswer(query, results, metadata)) {
+    for await (const textChunk of streamAnswer(query, results, metadata, userApiKey || undefined)) {
       if (clientClosed) return;
       // SSE frame format: `data: <payload>\n\n`. Both \n and \r terminate a
       // frame, so encode both — the client decodes on receive.
@@ -195,38 +232,13 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Query stream error:", err);
     if (!clientClosed) {
-      res.write(`event: error\ndata: Something went wrong\n\n`);
+      const msg = clientError(err, "Something went wrong. Please try again.");
+      res.write(`event: error\ndata: ${msg}\n\n`);
       res.end();
     }
   }
 });
 
-// POST /api/repos/:id/change-guide — describe a change, get guidance
-app.post("/api/repos/:id/change-guide", async (req: Request, res: Response) => {
-  const repoId = req.params.id;
-  const { description } = req.body ?? {};
-
-  if (!description || typeof description !== "string") {
-    return res.status(400).json({ error: "Missing or invalid 'description' in request body" });
-  }
-  if (description.length > 2000) {
-    return res.status(400).json({ error: "Query too long. Max 2000 characters." });
-  }
-  const metadata = repoMetadataStore.get(repoId);
-  if (!metadata || !hasRepo(repoId)) {
-    return res.status(404).json({ error: "Repo not found. It may have expired or never been ingested." });
-  }
-
-  try {
-    const queryVector = await embedQuery(description);
-    const results = search(repoId, queryVector);
-    const guide = await generateChangeGuide(description, results, metadata);
-    return res.json(guide);
-  } catch (err) {
-    console.error("Change guide failed:", err);
-    return res.status(500).json({ error: clientError(err, "Failed to generate change guide.") });
-  }
-});
 
 // --- Error handler ---
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

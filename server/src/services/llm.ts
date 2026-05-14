@@ -1,34 +1,43 @@
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { SearchResult } from "./vectorStore.js";
 import type { RepoMetadata } from "../types/index.js";
 
-const CHANGE_GUIDE_SCHEMA = {
-  type: SchemaType.OBJECT,
-  properties: {
-    summary: { type: SchemaType.STRING },
-    filesToModify: {
-      type: SchemaType.ARRAY,
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          filePath:   { type: SchemaType.STRING },
-          reason:     { type: SchemaType.STRING },
-          suggestion: { type: SchemaType.STRING },
-        },
-      },
-    },
-  },
-};
-
 const LLM_MODEL = "gemini-2.5-flash";
 
-function getModel() {
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+function getModel(apiKey?: string) {
+  const key = apiKey || process.env.GEMINI_API_KEY;
+  if (!key) throw new Error("No Gemini API key available.");
+  const genAI = new GoogleGenerativeAI(key);
   return genAI.getGenerativeModel({ model: LLM_MODEL });
 }
 
-// Format retrieved chunks into a readable context block for the prompt.
-// We include file path + score so the LLM can reference where things live.
+function buildRepoContext(metadata: RepoMetadata): string {
+  const { owner, repo, url, branch, fileCount, techStack, folderTree } = metadata;
+
+  const stackParts: string[] = [];
+  if (techStack.framework)                  stackParts.push(techStack.framework);
+  if (techStack.buildTool)                  stackParts.push(techStack.buildTool);
+  if (techStack.stateManagement?.length)    stackParts.push(...techStack.stateManagement);
+  if (techStack.styling?.length)            stackParts.push(...techStack.styling);
+  if (techStack.testing?.length)            stackParts.push(...techStack.testing);
+  if (techStack.backend?.length)            stackParts.push(...techStack.backend);
+  if (techStack.other?.length)              stackParts.push(...techStack.other);
+
+  const topLevel = (folderTree.children ?? [])
+    .filter((n) => n.type === "directory")
+    .map((n) => `  ${n.name}/`)
+    .join("\n");
+
+  return [
+    `Repository: ${owner}/${repo}`,
+    `URL: ${url}`,
+    `Branch: ${branch}`,
+    `Files: ${fileCount} JS/TS source files`,
+    stackParts.length ? `Tech stack: ${stackParts.join(", ")}` : null,
+    topLevel ? `\nTop-level structure:\n${topLevel}` : null,
+  ].filter(Boolean).join("\n");
+}
+
 function buildContext(results: SearchResult[]): string {
   return results
     .map((r, i) => {
@@ -43,78 +52,30 @@ function buildContext(results: SearchResult[]): string {
 export async function* streamAnswer(
   query: string,
   results: SearchResult[],
-  metadata: RepoMetadata
+  metadata: RepoMetadata,
+  apiKey?: string
 ): AsyncGenerator<string> {
-  const model = getModel();
+  const model = getModel(apiKey);
 
-  const prompt = `You are an expert code assistant helping a developer understand the ${metadata.repo} codebase.
+  const prompt = `You are an expert code assistant helping a developer understand a codebase.
 
-Tech stack: ${JSON.stringify(metadata.techStack)}
+${buildRepoContext(metadata)}
 
-The following code snippets were retrieved as most relevant to the question:
+Relevant code:
 
 ${buildContext(results)}
 
 Question: ${query}
 
-Answer clearly and concisely. Reference specific file paths and function names where relevant.
-If the retrieved snippets don't contain enough information to fully answer, say so honestly.
-Do not make up code that isn't in the snippets above.`;
+Answer directly and concisely. Reference specific file paths and function names where relevant.
+Never mention "the provided snippets", "the context", or how you retrieved the information — just answer as if you know the codebase.
+If you don't have enough information to answer confidently, say so briefly.
+Do not make up code that isn't in the context above.`;
 
-  try {
-    const response = await model.generateContentStream(prompt);
-    for await (const chunk of response.stream) {
-      const text = chunk.text();
-      if (text) yield text;
-    }
-  } catch (err) {
-    console.error("Stream error:", err);
-    yield "\n\n[Error: response was interrupted. Please try again.]";
+  const response = await model.generateContentStream(prompt);
+  for await (const chunk of response.stream) {
+    const text = chunk.text();
+    if (text) yield text;
   }
 }
 
-// --- Change guide: given a description of a change, identify files to modify ---
-
-export async function generateChangeGuide(
-  description: string,
-  results: SearchResult[],
-  metadata: RepoMetadata
-): Promise<{
-  summary: string;
-  filesToModify: Array<{ filePath: string; reason: string; suggestion: string }>;
-}> {
-  const model = getModel();
-
-  const prompt = `You are an expert code assistant helping a developer make a change to the ${metadata.repo} codebase.
-
-Tech stack: ${JSON.stringify(metadata.techStack)}
-
-The following code snippets are the most relevant to the requested change:
-
-${buildContext(results)}
-
-Requested change: ${description}
-
-Return a JSON object with:
-- "summary": a 1-2 sentence plain-English description of the overall approach
-- "filesToModify": an array of objects, each with:
-  - "filePath": the file to change (use exact paths from the snippets above)
-  - "reason": why this file needs to change
-  - "suggestion": a concrete, specific suggestion for what to add/change in this file
-
-Only include files that genuinely need to change. Do not invent files not present in the snippets.`;
-
-  const response = await model.generateContent({
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      responseMimeType: "application/json",
-      responseSchema: CHANGE_GUIDE_SCHEMA,
-    },
-  });
-
-  const raw = response.response.text();
-  return JSON.parse(raw) as {
-    summary: string;
-    filesToModify: Array<{ filePath: string; reason: string; suggestion: string }>;
-  };
-}

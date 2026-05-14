@@ -42,6 +42,14 @@ export interface TechStack {
   other?: string[];
 }
 
+export interface ChunkBreakdown {
+  component: number;
+  hook: number;
+  function: number;
+  class: number;
+  type: number;
+}
+
 export interface RepoMetadata {
   id: string;
   url: string;
@@ -53,6 +61,10 @@ export interface RepoMetadata {
   techStack: TechStack;
   folderTree: FolderNode;
   ingestedAt: string;
+  linesOfCode?: number;
+  dependencyCount?: number;
+  devDependencyCount?: number;
+  chunkBreakdown?: ChunkBreakdown;
 }
 
 export interface IngestedRepo {

@@ -43,10 +43,8 @@ async function prebakeOne(owner: string, repo: string): Promise<void> {
   const { files, branch, folderTree } = await fetchRepo(url);
   console.log(`  Fetched ${files.length} files`);
 
-  const [chunks, techStack] = await Promise.all([
-    Promise.resolve(chunkFiles(files)),
-    detectTechStack(files),
-  ]);
+  const techStack = detectTechStack(files);
+  const chunks = chunkFiles(files);
   console.log(`  Parsed → ${chunks.length} chunks`);
 
   const embeddedChunks = await embedChunks(chunks);

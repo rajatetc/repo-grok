@@ -1,13 +1,15 @@
+import AdmZip from "adm-zip";
 import { Octokit } from "@octokit/rest";
 import type { RepoFile, FolderNode } from "../types/index.js";
 
-const ALLOWED_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
+const ALLOWED_EXTENSIONS = new Set([
+  ".js", ".jsx", ".ts", ".tsx",   // JavaScript / TypeScript
+  ".html", ".htm",                 // HTML
+  ".css", ".scss", ".sass", ".less", // CSS & preprocessors
+  ".vue", ".svelte",               // component formats (line-chunked)
+]);
 const MAX_FILE_SIZE = 500 * 1024; // 500KB
-const BATCH_SIZE = 10;
 
-// Skip third-party code, compiled output, lock files, and non-code directories.
-// Examples and demos are kept — they show real usage patterns and make RAG answers
-// better for questions like "how do I use X in a real app?".
 const IGNORED_PATHS = [
   "node_modules/",
   "dist/",
@@ -16,24 +18,16 @@ const IGNORED_PATHS = [
   "package-lock.json",
   "yarn.lock",
   "pnpm-lock.yaml",
-  ".min.",      // minified files
-  "/fixtures/", // large static test data, not code
-  "/website/",  // documentation site source (e.g. Docusaurus), not library code
+  ".min.",
+  "/fixtures/",
+  "/website/",
 ];
-
-function createOctokit(): Octokit {
-  return new Octokit({
-    auth: process.env.GITHUB_TOKEN,
-  });
-}
 
 export function parseGitHubUrl(url: string): {
   owner: string;
   repo: string;
   branch?: string;
 } {
-  // Parse via WHATWG URL so we can enforce protocol/hostname and reject
-  // credentials embedded in the URL (e.g. https://x-access-token:TOKEN@github.com/...).
   let parsed: URL;
   try {
     parsed = new URL(url.trim());
@@ -41,27 +35,17 @@ export function parseGitHubUrl(url: string): {
     throw new Error("Invalid GitHub URL");
   }
 
-  if (parsed.protocol !== "https:") {
-    throw new Error("Invalid GitHub URL");
-  }
-  if (parsed.hostname !== "github.com") {
-    throw new Error("Invalid GitHub URL");
-  }
-  if (parsed.username !== "" || parsed.password !== "") {
-    // Never log the raw URL — it may contain a token.
-    throw new Error("Invalid GitHub URL");
-  }
+  if (parsed.protocol !== "https:") throw new Error("Invalid GitHub URL");
+  if (parsed.hostname !== "github.com") throw new Error("Invalid GitHub URL");
+  if (parsed.username !== "" || parsed.password !== "") throw new Error("Invalid GitHub URL");
 
-  // Strip leading slash, trailing slash, and a trailing `.git` from the path.
   const pathname = parsed.pathname
     .replace(/^\/+/, "")
     .replace(/\/+$/, "")
     .replace(/\.git$/, "");
 
   const parts = pathname.split("/");
-  if (parts.length < 2) {
-    throw new Error("Invalid GitHub URL");
-  }
+  if (parts.length < 2) throw new Error("Invalid GitHub URL");
 
   const owner = parts[0];
   const repo = parts[1];
@@ -73,7 +57,6 @@ export function parseGitHubUrl(url: string): {
 
   let branch: string | undefined;
   if (parts.length > 2) {
-    // Expect `/tree/<branch>` after owner/repo. Anything else is invalid.
     if (parts[2] !== "tree" || parts.length < 4) {
       throw new Error(`Invalid GitHub URL for ${owner}/${repo}`);
     }
@@ -90,100 +73,77 @@ export function parseGitHubUrl(url: string): {
 function getExtension(filePath: string): string {
   const filename = filePath.split("/").pop() ?? "";
   const dot = filename.lastIndexOf(".");
-  // dot > 0 excludes dotfiles like .eslintrc (dot at index 0 = no real extension)
   return dot > 0 ? filename.slice(dot) : "";
 }
 
 function isAllowedFile(path: string): boolean {
-  if (IGNORED_PATHS.some((p) => path.includes(p))) return false;
+  const segments = path.split("/");
+  if (IGNORED_PATHS.some((p) => segments.includes(p))) return false;
   const filename = path.split("/").pop() ?? "";
   if (filename === "package.json") return true;
   return ALLOWED_EXTENSIONS.has(getExtension(path));
 }
 
-async function getDefaultBranch(
-  octokit: Octokit,
-  owner: string,
-  repo: string
-): Promise<string> {
+async function getDefaultBranch(owner: string, repo: string): Promise<string> {
+  const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
   const { data } = await octokit.repos.get({ owner, repo });
   return data.default_branch;
 }
 
-async function fetchFilePaths(
-  octokit: Octokit,
+// Download the full repo as a zip archive — one HTTP call, no per-file API requests.
+// GitHub returns a 302 → CDN redirect; fetch follows it automatically.
+// The zip has a single top-level folder "{owner}-{repo}-{sha}/"; we strip it.
+async function downloadZip(
   owner: string,
   repo: string,
   branch: string
-): Promise<Array<{ path: string; size: number; sha: string }>> {
-  const { data } = await octokit.git.getTree({
-    owner,
-    repo,
-    tree_sha: branch,
-    recursive: "1",
-  });
-
-  if (data.truncated) {
-    console.warn("Git tree was truncated — very large repo, some files skipped");
-  }
-
-  return (data.tree ?? [])
-    .filter(
-      (item) =>
-        item.type === "blob" &&
-        item.path != null &&
-        item.size != null &&
-        item.size <= MAX_FILE_SIZE &&
-        isAllowedFile(item.path)
-    )
-    .map((item) => ({
-      path: item.path!,
-      size: item.size!,
-      sha: item.sha!,
-    }));
-}
-
-async function fetchFileContent(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  path: string,
-  branch: string
-): Promise<string | null> {
-  try {
-    // ref: branch ensures we fetch from the correct branch, not always default
-    const { data } = await octokit.repos.getContent({ owner, repo, path, ref: branch });
-    if (Array.isArray(data) || data.type !== "file") return null;
-    if (!data.content) return null;
-    return Buffer.from(data.content, "base64").toString("utf-8");
-  } catch (err) {
-    const status = (err as { status?: number }).status;
-    if (status !== 404) console.warn(`Failed to fetch ${path} (${status})`);
-    return null;
-  }
-}
-
-async function fetchFilesInBatches(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  branch: string,
-  files: Array<{ path: string; size: number }>
 ): Promise<RepoFile[]> {
-  const results: RepoFile[] = [];
-
-  for (let i = 0; i < files.length; i += BATCH_SIZE) {
-    const batch = files.slice(i, i + BATCH_SIZE);
-    const fetched = await Promise.all(
-      batch.map(async ({ path, size }) => {
-        const content = await fetchFileContent(octokit, owner, repo, path, branch);
-        return content != null ? { path, content, size } : null;
-      })
-    );
-    results.push(...(fetched.filter(Boolean) as RepoFile[]));
+  const url = `https://api.github.com/repos/${owner}/${repo}/zipball/${branch}`;
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "RepoGrok/1.0",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+  if (process.env.GITHUB_TOKEN) {
+    headers["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
   }
 
-  return results;
+  const response = await fetch(url, { headers, redirect: "follow", signal: AbortSignal.timeout(60_000) });
+  if (!response.ok) {
+    throw new Error(`GitHub archive download failed: ${response.status} ${response.statusText}`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const zip = new AdmZip(buffer);
+  const entries = zip.getEntries();
+
+  // Derive the prefix from the first entry (e.g. "facebook-react-a1b2c3/")
+  const prefix = (entries[0]?.entryName.split("/")[0] ?? "") + "/";
+
+  const MAX_TOTAL_BYTES = 150 * 1024 * 1024; // 150 MB uncompressed across all processed files
+  let totalBytes = 0;
+
+  const files: RepoFile[] = [];
+  for (const entry of entries) {
+    if (entry.isDirectory) continue;
+
+    const path = entry.entryName.slice(prefix.length);
+    if (!path || !isAllowedFile(path)) continue;
+
+    const size = entry.header.size; // uncompressed size from zip directory (no decompression)
+    if (size > MAX_FILE_SIZE) continue;
+    if (totalBytes + size > MAX_TOTAL_BYTES) continue;
+
+    try {
+      const content = entry.getData().toString("utf-8");
+      files.push({ path, content, size });
+      totalBytes += size;
+    } catch {
+      // skip unreadable entries (corrupt or binary despite extension match)
+    }
+  }
+
+  return files;
 }
 
 export function buildFolderTree(files: RepoFile[]): FolderNode {
@@ -201,9 +161,7 @@ export function buildFolderTree(files: RepoFile[]): FolderNode {
       if (isLeaf) {
         node.children!.push({ name: part, path: currentPath, type: "file" });
       } else {
-        let dir = node.children!.find(
-          (c) => c.type === "directory" && c.name === part
-        );
+        let dir = node.children!.find((c) => c.type === "directory" && c.name === part);
         if (!dir) {
           dir = { name: part, path: currentPath, type: "directory", children: [] };
           node.children!.push(dir);
@@ -223,20 +181,15 @@ export async function fetchRepo(url: string): Promise<{
   branch: string;
   folderTree: FolderNode;
 }> {
-  const octokit = createOctokit();
   const parsed = parseGitHubUrl(url);
   const { owner, repo } = parsed;
-  const branch = parsed.branch ?? (await getDefaultBranch(octokit, owner, repo));
+  const branch = parsed.branch ?? (await getDefaultBranch(owner, repo));
 
-  console.log(`Fetching ${owner}/${repo}@${branch}...`);
+  console.log(`Fetching ${owner}/${repo}@${branch}…`);
 
-  const fileMeta = await fetchFilePaths(octokit, owner, repo, branch);
-  console.log(`Found ${fileMeta.length} eligible files`);
-
-  const files = await fetchFilesInBatches(octokit, owner, repo, branch, fileMeta);
-  console.log(`Fetched content for ${files.length} files`);
+  const files = await downloadZip(owner, repo, branch);
+  console.log(`Extracted ${files.length} files`);
 
   const folderTree = buildFolderTree(files);
-
   return { files, owner, repo, branch, folderTree };
 }
