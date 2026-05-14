@@ -12,9 +12,12 @@ interface Props {
 const SUGGESTIONS = [
   "How is the code structured?",
   "Walk me through the core flow",
-  "What are the main exports?",
   "How are errors handled?",
 ];
+
+// Top-K shown to user. Fewer chips = less noise. The model gets all 8 from
+// the server; we just don't surface them all in the UI.
+const MAX_VISIBLE_SOURCES = 3;
 
 export default function ChatTab({ repoId }: Props) {
   const { messages, addMessage, appendToLastMessage, setSourcesOnLastMessage, metadata } = useRepoStore();
@@ -68,6 +71,7 @@ export default function ChatTab({ repoId }: Props) {
       () => setStreaming(false),
       (err) => {
         appendToLastMessage(`\n\n_${err}_`);
+        setSourcesOnLastMessage([]); // drop any sources attached before the error fired
         setStreaming(false);
       },
       (sources) => setSourcesOnLastMessage(sources),
@@ -128,8 +132,8 @@ export default function ChatTab({ repoId }: Props) {
                 {streaming && i === messages.length - 1 && <span className={styles.cursor} />}
                 {msg.sources && msg.sources.length > 0 && !(streaming && i === messages.length - 1) && (
                   <div className={styles.sources}>
-                    <span className={styles.sourcesLabel}>Sources</span>
-                    {msg.sources.map((s) => (
+                    <span className={styles.sourcesLabel}>Related</span>
+                    {msg.sources.slice(0, MAX_VISIBLE_SOURCES).map((s) => (
                       <a
                         key={s.filePath}
                         href={blobUrl(s.filePath)}
