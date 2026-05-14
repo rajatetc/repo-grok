@@ -145,6 +145,11 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
     }
 
     const techStack = detectTechStack(files);
+    // Two emits: the first transitions the UI into "chunk" stage immediately
+    // (chunking is sync and takes a few seconds for big repos), the second
+    // updates the count once it's done. Without the first, the UI sits on
+    // "fetch" through the entire AST parsing pass and feels stuck.
+    emit("progress", { stage: "chunk" });
     const chunks = chunkFiles(files);
     emit("progress", { stage: "chunk", total: chunks.length });
 

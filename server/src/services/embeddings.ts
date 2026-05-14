@@ -16,6 +16,11 @@ const ENDPOINT = ACCOUNT_ID
 const BATCH_SIZE = 100;          // CF's hard max per request
 const MAX_CHARS_PER_TEXT = 1800; // BGE input limit is 512 tokens (~2000 chars); truncate defensively
 const MAX_RETRIES = 3;
+// Number of batches to send to Cloudflare in parallel. 4 is well under the
+// 3000-RPM rate limit (we'd need 50/sec to hit it) and the latency-bound
+// nature of the API means each parallel call slot is mostly waiting on
+// network anyway. Cuts ingest time for big repos ~4x.
+const PARALLEL_BATCHES = 4;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -73,20 +78,33 @@ export async function embedChunks(
   chunks: CodeChunk[],
   onProgress?: (done: number, total: number) => void
 ): Promise<CodeChunk[]> {
-  console.log(`Embedding ${chunks.length} chunks via Cloudflare BGE…`);
+  console.log(`Embedding ${chunks.length} chunks via Cloudflare BGE (${PARALLEL_BATCHES}× parallel)…`);
 
+  // Slice into batches up front so we can dispatch them in fixed-size waves.
+  const batches: { startIdx: number; items: CodeChunk[] }[] = [];
   for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-    const batch = chunks.slice(i, i + BATCH_SIZE);
-    const texts = batch.map(chunkToText);
+    batches.push({ startIdx: i, items: chunks.slice(i, i + BATCH_SIZE) });
+  }
+
+  let completed = 0;
+
+  async function processBatch(batch: { startIdx: number; items: CodeChunk[] }) {
+    const texts = batch.items.map(chunkToText);
     const embeddings = await callCloudflare(texts);
-
-    for (let j = 0; j < batch.length; j++) {
-      chunks[i + j].embedding = embeddings[j];
+    for (let j = 0; j < batch.items.length; j++) {
+      chunks[batch.startIdx + j].embedding = embeddings[j];
     }
+    completed += batch.items.length;
+    onProgress?.(completed, chunks.length);
+    console.log(`  ${completed}/${chunks.length}`);
+  }
 
-    const done = Math.min(i + BATCH_SIZE, chunks.length);
-    onProgress?.(done, chunks.length);
-    console.log(`  ${done}/${chunks.length}`);
+  // Run PARALLEL_BATCHES at a time. Promise.all rejects fast on the first
+  // failure — desirable here, we'd rather fail the whole ingest than store
+  // a partially-embedded repo.
+  for (let i = 0; i < batches.length; i += PARALLEL_BATCHES) {
+    const wave = batches.slice(i, i + PARALLEL_BATCHES);
+    await Promise.all(wave.map(processBatch));
   }
 
   return chunks;
