@@ -1,3 +1,4 @@
+import { LRUCache } from "lru-cache";
 import type { CodeChunk, ChunkType } from "../types/index.js";
 
 export interface SearchResult {
@@ -11,9 +12,10 @@ export interface SearchOptions {
   filterType?: ChunkType[]; // optionally restrict to specific chunk types
 }
 
-// In-memory store: one entry per ingested repo
-// key = repoId, value = all embedded chunks for that repo
-const store = new Map<string, CodeChunk[]>();
+const MAX_REPOS = 50;
+
+// In-memory store: one entry per ingested repo, evicts LRU when full
+const store = new LRUCache<string, CodeChunk[]>({ max: MAX_REPOS });
 
 // --- Cosine similarity ---
 // Measures the angle between two vectors.

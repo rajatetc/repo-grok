@@ -22,6 +22,7 @@ import { fetchRepo } from "./services/github.js";
 import { chunkFiles } from "./services/chunker.js";
 import { detectTechStack } from "./utils/techDetector.js";
 import { embedChunks, embedQuery, loadEmbeddingModel } from "./services/embeddings.js";
+import { LRUCache } from "lru-cache";
 import { storeChunks, search, hasRepo } from "./services/vectorStore.js";
 import { streamAnswer } from "./services/llm.js";
 import { loadSeeds } from "./services/seeds.js";
@@ -45,15 +46,14 @@ if (!process.env.CLIENT_URL) {
 app.use(cors({ origin: clientOrigin, allowedHeaders: ["Content-Type", "x-gemini-key"] }));
 app.use(express.json({ limit: "100kb" }));
 
+const MAX_REPOS = 50;
+
 // --- Repo metadata store ---
-// Lives alongside the vector store (which holds chunks). Same lifetime, same process.
-// Keyed by the repoId we hand back to the client after ingestion.
-const repoMetadataStore = new Map<string, RepoMetadata>();
+const repoMetadataStore = new LRUCache<string, RepoMetadata>({ max: MAX_REPOS });
 
 // --- URL dedup cache ---
-// Normalized URL → repoId so re-submitting the same repo is instant.
-// Pre-populated with seeds on startup.
-const urlCache = new Map<string, string>();
+// Normalized URL → repoId. Pre-populated with seeds on startup.
+const urlCache = new LRUCache<string, string>({ max: MAX_REPOS });
 
 // --- Rate limiters ---
 // General limiter: protects against accidental loops / abusive clients.
