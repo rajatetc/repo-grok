@@ -24,6 +24,9 @@
     "express-rate-limit": "^7.4.0",
     "lru-cache": "^11.3.6"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
     "@types/babel__traverse": "^7.20.6",
