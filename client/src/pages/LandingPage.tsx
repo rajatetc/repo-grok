@@ -2,10 +2,41 @@ import { useState, useRef, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRepoStore } from "../store/useRepoStore";
 import { ingestRepoStream } from "../api";
-import { useIngestionProgress } from "../hooks/useIngestionProgress";
+import { useIngestionProgress, type IngestionStage } from "../hooks/useIngestionProgress";
 import { useTheme } from "../hooks/useTheme";
 import { EXAMPLES } from "../constants";
 import styles from "./LandingPage.module.css";
+
+const STEPS: {
+  id: IngestionStage;
+  icon: string;
+  label: string;
+  tooltip?: { title: string; body: string };
+}[] = [
+  { id: "fetch", icon: "↓", label: "Fetch" },
+  {
+    id: "chunk", icon: "⚙", label: "Parse",
+    tooltip: { title: "AST", body: "Babel parses your code into a tree of functions, components, and classes. We chunk by these semantic units — not arbitrary line counts." },
+  },
+  {
+    id: "embed", icon: "✦", label: "Embed",
+    tooltip: { title: "Embeddings", body: "Each chunk becomes 384 numbers capturing its meaning. Runs locally — no API calls. Similar code = similar vectors." },
+  },
+  {
+    id: "done", icon: "◎", label: "Chat",
+    tooltip: { title: "RAG", body: "Retrieval-Augmented Generation — your question finds the top relevant chunks via cosine similarity. Only those go to Gemini, not the whole codebase." },
+  },
+];
+
+const STAGE_ORDER: IngestionStage[] = ["idle", "fetch", "chunk", "embed", "done"];
+
+function stepClassName(stepId: IngestionStage, stage: IngestionStage, styles: Record<string, string>): string {
+  if (stage === "idle") return styles.stepIdle;
+  const stepIdx = STAGE_ORDER.indexOf(stepId);
+  const stageIdx = STAGE_ORDER.indexOf(stage);
+  if (stepIdx <= stageIdx) return styles.stepVisible;
+  return styles.stepDim;
+}
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -13,7 +44,7 @@ export default function LandingPage() {
   const { theme, toggle } = useTheme();
   const [url, setUrl] = useState("");
   const isLoading = status === "ingesting";
-  const { percent, message, onProgress, onDone, reset } = useIngestionProgress();
+  const { percent, message, stage, onProgress, onDone, reset } = useIngestionProgress();
   const cleanupRef = useRef<(() => void) | null>(null);
 
   function handleSubmit(e: FormEvent) {
@@ -74,6 +105,27 @@ export default function LandingPage() {
 
 
         {isLoading && message && <p className={styles.hint}>{message}</p>}
+
+        <div className={styles.pipeline}>
+          {STEPS.map((step, i) => (
+            <div key={step.id} className={styles.pipelineItem}>
+              <div className={`${styles.step} ${stepClassName(step.id, stage, styles)}`}>
+                <span className={styles.stepIcon}>{step.icon}</span>
+                <span>{step.label}</span>
+                {step.tooltip && (
+                  <span className={styles.tooltipWrap}>
+                    <span className={styles.tooltipTrigger}>?</span>
+                    <span className={styles.tooltip}>
+                      <span className={styles.tooltipTitle}>{step.tooltip.title}</span>
+                      {step.tooltip.body}
+                    </span>
+                  </span>
+                )}
+              </div>
+              {i < STEPS.length - 1 && <span className={styles.stepArrow}>→</span>}
+            </div>
+          ))}
+        </div>
         {status === "error" && error && <p className={styles.errorMsg}>{error}</p>}
       </div>
 
