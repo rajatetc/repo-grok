@@ -12,6 +12,9 @@
 - [API key handling](#api-key-handling)
 - [IP-based rate limiting](#why-ip-based-rate-limiting-instead-of-login-for-mvp)
 - [Deployment strategy](#deployment-strategy)
+- [Render 512MB tuning](#fitting-inside-renders-512mb-free-tier)
+- [Trust proxy on Render](#why-app-set-trust-proxy-1-on-render)
+- [Keepalive ping](#cron-joborg-keepalive-instead-of-paying-to-stay-warm)
 - [Chunking strategy](#chunking-strategy-top-level-ast-nodes-only)
 - [Frontend UX decisions](#frontend-ux-decisions)
 
@@ -139,13 +142,70 @@ Two limiters:
 ---
 
 ## Deployment strategy
-- **Backend** (Express, stateful) → Railway: persistent process, auto-deploys from GitHub, env vars in dashboard.
-- **Frontend** (React/Vite, static) → Vercel: free static hosting, deploys from GitHub.
-- `GEMINI_API_KEY` and `GITHUB_TOKEN` go in Railway's dashboard — never in the repo.
-- Frontend `VITE_API_URL` points to the Railway backend URL.
+- **Backend** (Express, stateful) → Render Web Service free tier: 512MB RAM, 0.1 CPU, sleeps after 15min idle.
+- **Frontend** (React/Vite, static) → Vercel free tier: edge CDN.
+- `GEMINI_API_KEY`, `GITHUB_TOKEN`, `CLIENT_URL` go in Render's dashboard. Frontend's `VITE_API_URL` goes in Vercel's.
+- `NODE_ENV` is set in the **Start Command** (`NODE_ENV=production npm start`), not as a Render env var. Setting it as an env var would apply during `npm install` too and skip `devDependencies` — which the TypeScript build step needs (tsc, @types/*, etc).
 
-**Caveat:** Railway free tier sleeps after inactivity — in-memory store is lost on wake.
-Pre-baked seeds survive restarts for the example repos.
+**Why Render over Railway/Fly:**
+- Railway killed their free tier in Aug 2023, now requires a card.
+- Fly.io free tier caps at 256MB, which OOMs during embedding inference.
+- Koyeb requires a card now (changed mid-2025).
+- Render is the last major PaaS with a no-card free tier large enough for this app.
+
+**See also:** [Render 512MB tuning](#fitting-inside-renders-512mb-free-tier) for the memory-fitting work, [keepalive ping](#cron-joborg-keepalive-instead-of-paying-to-stay-warm) for the sleep workaround.
+
+---
+
+## Fitting inside Render's 512MB free tier
+
+The 512MB cap is shared between **two memory pools** that V8 tracks separately:
+
+| Pool | What lives there | Manager |
+|------|------------------|---------|
+| **V8 heap** | JS objects, arrays, strings — `chunks[]`, `RepoFile[]`, LRU caches | V8 garbage collector |
+| **Native (off-heap)** | ONNX model weights, inference tensor allocations, zlib buffers from `adm-zip` | C++ allocator inside each lib |
+
+The container limits the **sum** of both, but V8 only controls its own pool. Without intervention, V8 thinks it has 1.7GB to play with (the default `--max-old-space-size`) and GCs lazily — so the heap drifts up while native memory is also growing, and the kernel kills the process at 512MB before V8 has any reason to GC aggressively.
+
+**Symptom:** OOM during embedding inference, with peaks of ~430–500MB even with an empty cache.
+
+**Two-part fix:**
+
+1. **`EMBED_BATCH_SIZE = 16`** in `server/src/services/embeddings.ts` (was 64). ONNX inference allocates tensors of shape `[batch_size, tokens, hidden_size]` plus internal activations through 6 transformer layers. At batch=64 the inference peak was ~150–200MB native. At batch=16 it's ~40–50MB. Trade-off: 4× more batches per ingest, but the 0.1 CPU free tier is CPU-bound, not batch-throughput-bound, so wall-clock impact is ~10–20%.
+
+2. **`NODE_OPTIONS=--max-old-space-size=400`** as a Render env var. Caps V8 heap at 400MB, leaving 112MB for native (model ~100MB, inference tensors, zlib). The more important effect is **GC timing** — V8 runs aggressive mark-and-sweep when the heap approaches its limit. A tight ceiling forces aggressive mode earlier, before native memory growth pushes the total past 512MB.
+
+3. **`MAX_REPOS = 5`** in the LRU caches (was 50). At ~6MB per repo (3000 chunks × 384-float embeddings + content strings), 50 cached repos alone would be 300MB. Five is enough for typical "explore a couple of repos in a session" usage.
+
+**Result:** baseline ~220MB, peak ~350MB during ingestion. Comfortable headroom on 512MB.
+
+**See also:** [in-memory vector store](#why-in-memory-vector-store-instead-of-a-vector-db) explains why we have the LRU cache at all.
+
+---
+
+## Why `app.set("trust proxy", 1)` on Render
+
+Render's free tier terminates TLS at a reverse proxy and forwards requests to the container over plain HTTP, with the real client IP in the `X-Forwarded-For` header. Express's default is `trust proxy = false`, which means `req.ip` is the proxy's IP (same for every request), and any middleware that looks at `X-Forwarded-For` gets suspicious.
+
+Specifically, `express-rate-limit` v7 throws `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` because it doesn't know whether to trust the header — if trust is off but the header is present, the limiter would key on the proxy's IP and rate-limit everyone as one user.
+
+`app.set("trust proxy", 1)` tells Express: "trust exactly one hop of `X-Forwarded-For`." That's correct for Render (one proxy between client and container). Don't use `true` blindly — that trusts arbitrary hops and lets clients spoof their IP by setting their own `X-Forwarded-For`.
+
+---
+
+## cron-job.org keepalive instead of paying to stay warm
+
+Render free tier sleeps the service after 15 minutes of zero HTTP traffic. Waking it cold-loads the embedding model (~30s) and shows the first visitor a spinning page — bad portfolio impression.
+
+**Options considered:**
+- Pay $7/mo for Render Starter (always-on). Defeats the "free tier" goal.
+- Self-ping from inside the server (setInterval). Wouldn't work because the process is asleep — you can't wake yourself.
+- External cron pinging `/health`. Render's community FAQ explicitly tolerates this for free-tier services.
+
+**Chosen:** cron-job.org free account, schedule `*/14 * * * *` (every 14 minutes — slightly under the 15min sleep threshold to allow for clock drift), URL `https://repo-grok.onrender.com/health`.
+
+**Budget check:** Render free is 750 hr/mo. Continuous uptime is 720 hr/mo, so one always-warm service stays under the cap. Adding a second free service on the same account would exceed it.
 
 ---
 

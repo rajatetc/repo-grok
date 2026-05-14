@@ -115,9 +115,8 @@ repo-grok/
 ## API Routes
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/repos` | Ingest a repo (rate-limited: 5/hr) |
-| `GET` | `/api/repos/:id/overview` | Repo metadata + tech stack |
-| `POST` | `/api/repos/:id/query` | RAG query, SSE streamed |
+| `POST` | `/api/repos` | Ingest a repo, SSE streamed progress (rate-limited: 25/hr) |
+| `POST` | `/api/repos/:id/query` | RAG query, SSE streamed answer |
 | `GET` | `/health` | Health check |
 
 ## Conventions
@@ -137,3 +136,14 @@ repo-grok/
   - Examples: `feat(client): add dark mode toggle`, `fix(server): cap zip extraction at 150MB`
 - One concern per PR — don't bundle unrelated changes
 - Confirm before pushing; never force-push main
+
+## Documentation Rules
+- **Major changes go in [`NOTES.md`](./NOTES.md) in the same PR.** Commit messages capture the *what*; NOTES.md captures the *why*: what the problem was, what was tried, what trade-offs were accepted, what would have happened otherwise.
+- Triggers that always need a note:
+  - Architectural decisions (data model, RAG pipeline shape, chunking strategy)
+  - Performance tuning (memory limits, batch sizes, caching choices)
+  - Deployment-driven constraints (platform RAM, rate limits, proxy quirks) — name the platform
+  - Security or auth changes
+  - Anything where future-you would ask "wait, why is this 16 and not 64?"
+- When updating an existing decision, edit the existing section rather than appending a new one — keep one canonical entry per topic.
+- Cross-link related entries inside NOTES.md so they're discoverable together.
