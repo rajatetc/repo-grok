@@ -1,6 +1,7 @@
 # Ideas & Future Work
 
 ## Contents
+- [Conversational chat (multi-turn history)](#conversational-chat-multi-turn-history)
 - [Tests](#tests)
 - [Persistent storage](#persistent-storage)
 - [User context / persona](#user-context--persona-for-better-answers)
@@ -13,6 +14,24 @@
 - [More languages](#more-languages)
 - [Vector database at scale](#vector-database-when-scale-demands-it)
 - [Visualizations](#visualizations)
+
+---
+
+## Conversational Chat (multi-turn history)
+Currently each question is stateless — Gemini gets the repo context + RAG chunks + the current
+query, but has no memory of previous turns. A follow-up like "how does it handle errors?" has no
+referent; Gemini can't know "it" means the function mentioned two messages ago.
+
+**Fix:** send the last N message pairs along with each request.
+
+- Client already holds the full message array in Zustand. Send the last 6–10 messages as a
+  `history` field in the `POST /api/repos/:id/query` body.
+- Server passes them to `model.startChat({ history })` instead of `generateContentStream`.
+- Trim history to the last 4–6 turns to keep token usage bounded — older context is less useful
+  than the freshly-retrieved RAG chunks anyway.
+
+No server-side session state needed. Small payload increase per request; big quality improvement
+for multi-turn conversations.
 
 ---
 
