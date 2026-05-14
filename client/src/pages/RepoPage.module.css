@@ -73,19 +73,6 @@
 }
 .owner { font-weight: 400; color: var(--text-muted); }
 
-.keyBtn {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  transition: color 0.15s, border-color 0.15s;
-}
-.keyBtn:hover { color: var(--text); border-color: #9ca3af; }
-.keyBtnActive { color: #16a34a; border-color: #86efac; background: #f0fdf4; }
-
 /* ── Body: two-column ─────────────────── */
 .body {
   flex: 1;
@@ -142,80 +129,3 @@
   flex-direction: column;
 }
 
-/* ── API Key modal ────────────────────── */
-.modalBackdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.35);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-.modal {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-  padding: 24px;
-  width: 360px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.modalTitle { font-size: 15px; font-weight: 700; color: var(--text); }
-.modalHint  { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
-.modalLink  { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
-.modalLink:hover { opacity: 0.8; }
-.modalInput {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  padding: 9px 12px;
-  font-size: 13px;
-  font-family: ui-monospace, monospace;
-  outline: none;
-  transition: border-color 0.15s;
-}
-.modalInput:focus { border-color: #9ca3af; }
-.modalInput::placeholder { color: var(--text-muted); }
-.modalActions { display: flex; gap: 8px; }
-.modalSave {
-  background: var(--btn-bg);
-  color: var(--btn-fg);
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: 7px 18px;
-  font-size: 13px;
-  font-weight: 600;
-  transition: background 0.15s;
-}
-.modalSave:hover { background: var(--btn-bg-hover); }
-.modalClear {
-  background: none;
-  border: 1px solid #fca5a5;
-  color: #dc2626;
-  border-radius: var(--radius-sm);
-  padding: 7px 14px;
-  font-size: 13px;
-  transition: background 0.15s;
-}
-.modalClear:hover { background: #fef2f2; }
-.modalCancel {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  border-radius: var(--radius-sm);
-  padding: 7px 14px;
-  font-size: 13px;
-  margin-left: auto;
-  transition: color 0.15s;
-}
-.modalCancel:hover { color: var(--text); }
-
-
-/* ── Dark mode overrides ─────────────── */
-:global([data-theme="dark"]) .keyBtnActive { background: #052e16; color: #4ade80; border-color: #166534; }
-:global([data-theme="dark"]) .modalClear:hover { background: #450a0a; }
-:global([data-theme="dark"]) .modalInput:focus { border-color: #4b5563; }

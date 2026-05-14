@@ -12,11 +12,13 @@ import styles from "./RepoPage.module.css";
 export default function RepoPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { metadata, geminiKey, setGeminiKey, setReady, chunkWarning, setChunkWarning } = useRepoStore();
-  const [showKeyModal, setShowKeyModal] = useState(false);
-  const [keyInput, setKeyInput]         = useState("");
-  const [activeTab, setActiveTab]       = useState<"overview" | "pulse">("overview");
-  const [loading, setLoading]           = useState(!metadata || metadata.id !== id);
+  const { metadata, setReady, chunkWarning, setChunkWarning } = useRepoStore();
+  const [activeTab, setActiveTab] = useState<"overview" | "pulse">("overview");
+  // Pulse fires 4 GitHub API calls per repo open. Defer the mount until the
+  // user actually clicks the tab, then keep it mounted so the fetched data
+  // survives tab toggles for the rest of the session.
+  const [pulseEverOpened, setPulseEverOpened] = useState(false);
+  const [loading, setLoading]     = useState(!metadata || metadata.id !== id);
 
   useEffect(() => {
     if (!id) { navigate("/", { replace: true }); return; }
@@ -27,10 +29,6 @@ export default function RepoPage() {
       .then((data) => { setReady(id, data); setLoading(false); })
       .catch(() => navigate("/", { replace: true }));
   }, [id]);
-
-  function openKeyModal() { setKeyInput(geminiKey ?? ""); setShowKeyModal(true); }
-  function saveKey()      { setGeminiKey(keyInput.trim() || null); setShowKeyModal(false); }
-  function removeKey()    { setGeminiKey(null); setKeyInput(""); setShowKeyModal(false); }
 
   if (loading || !metadata) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "var(--text-muted)", fontSize: 14 }}>
@@ -51,12 +49,6 @@ export default function RepoPage() {
         </div>
         <div className={styles.navRight}>
           <ThemeToggle className={styles.iconBtn} />
-          <button
-            className={`${styles.keyBtn} ${geminiKey ? styles.keyBtnActive : ""}`}
-            onClick={openKeyModal}
-          >
-            {geminiKey ? "Key set ✓" : "API Key"}
-          </button>
         </div>
       </nav>
 
@@ -81,49 +73,22 @@ export default function RepoPage() {
             >Overview</button>
             <button
               className={`${styles.sidebarTab} ${activeTab === "pulse" ? styles.sidebarTabActive : ""}`}
-              onClick={() => setActiveTab("pulse")}
+              onClick={() => { setActiveTab("pulse"); setPulseEverOpened(true); }}
             >Pulse</button>
           </div>
           <div className={styles.sidebarContent}>
             <div hidden={activeTab !== "overview"}><OverviewTab metadata={metadata} /></div>
-            <div hidden={activeTab !== "pulse"}><PulseTab owner={metadata.owner} repo={metadata.repo} /></div>
+            {pulseEverOpened && (
+              <div hidden={activeTab !== "pulse"}><PulseTab owner={metadata.owner} repo={metadata.repo} /></div>
+            )}
           </div>
         </aside>
         <main className={styles.chatArea}>
-          <ChatTab repoId={metadata.id} onOpenKeyModal={openKeyModal} />
+          <ChatTab repoId={metadata.id} />
         </main>
       </div>
 
       <Footer />
-
-      {/* ── API Key modal ─────────────────── */}
-      {showKeyModal && (
-        <div className={styles.modalBackdrop} onClick={() => setShowKeyModal(false)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <p className={styles.modalTitle}>Bring your own Gemini key</p>
-            <p className={styles.modalHint}>
-              Stored in memory only — gone when you close the tab. Never written to disk or sent to our server except as a request header for your own queries.{" "}
-              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className={styles.modalLink}>
-                Get a free key →
-              </a>
-            </p>
-            <input
-              className={styles.modalInput}
-              type="password"
-              placeholder="AIza…"
-              value={keyInput}
-              onChange={(e) => setKeyInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && saveKey()}
-              autoFocus
-            />
-            <div className={styles.modalActions}>
-              <button className={styles.modalSave} onClick={saveKey}>Save</button>
-              {geminiKey && <button className={styles.modalClear} onClick={removeKey}>Remove</button>}
-              <button className={styles.modalCancel} onClick={() => setShowKeyModal(false)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

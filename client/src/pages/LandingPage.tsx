@@ -1,4 +1,4 @@
-import { useState, useRef, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRepoStore } from "../store/useRepoStore";
 import { useRecentRepos } from "../store/useRecentRepos";
@@ -13,27 +13,37 @@ const STEPS: {
   id: IngestionStage;
   icon: string;
   label: string;
+  tech: string;
   tooltip: { title: string; body: string };
 }[] = [
   {
-    id: "fetch", icon: "↓", label: "Fetch",
+    id: "fetch", icon: "↓", label: "Fetch", tech: "Zip",
     tooltip: { title: "Fetch", body: "Downloads the repo as a single zip from GitHub. One HTTP call, all files at once." },
   },
   {
-    id: "chunk", icon: "⚙", label: "Parse",
+    id: "chunk", icon: "⚙", label: "Parse", tech: "Babel AST",
     tooltip: { title: "AST", body: "Babel turns your code into a syntax tree. We split by real boundaries — functions, components, hooks, classes — not arbitrary line counts." },
   },
   {
-    id: "embed", icon: "✦", label: "Embed",
+    id: "embed", icon: "✦", label: "Embed", tech: "BGE-small 384d",
     tooltip: { title: "Embeddings", body: "Each chunk becomes 384 numbers that capture its meaning. Similar code = similar vectors." },
   },
   {
-    id: "done", icon: "◎", label: "Chat",
+    id: "done", icon: "◎", label: "Chat", tech: "RAG · Gemini",
     tooltip: { title: "RAG", body: "Your question is embedded the same way. The top matching chunks go to Gemini — not the whole codebase. That's retrieval-augmented generation." },
   },
 ];
 
 const STAGE_ORDER: IngestionStage[] = ["idle", "fetch", "chunk", "embed", "done"];
+
+const STACK: { label: string; value: string }[] = [
+  { label: "Frontend",   value: "React · TypeScript · Vite" },
+  { label: "Backend",    value: "Node · Express · TypeScript" },
+  { label: "Parser",     value: "Babel AST" },
+  { label: "Embeddings", value: "bge-small-en-v1.5 (384d, Cloudflare)" },
+  { label: "LLM",        value: "Gemini 2.5 Flash" },
+  { label: "Retrieval",  value: "In-memory cosine similarity" },
+];
 
 function stepClassName(stepId: IngestionStage, stage: IngestionStage, styles: Record<string, string>): string {
   if (stage === "idle") return styles.stepIdle;
@@ -51,6 +61,24 @@ export default function LandingPage() {
   const isLoading = status === "ingesting";
   const { percent, stage, onProgress, onDone, reset } = useIngestionProgress();
   const cleanupRef = useRef<(() => void) | null>(null);
+  const [stackOpen, setStackOpen] = useState(false);
+  const logoRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!stackOpen) return;
+    function handle(e: MouseEvent | KeyboardEvent) {
+      if (e instanceof KeyboardEvent && e.key === "Escape") { setStackOpen(false); return; }
+      if (e instanceof MouseEvent && logoRef.current && !logoRef.current.contains(e.target as Node)) {
+        setStackOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handle);
+    document.addEventListener("keydown", handle);
+    return () => {
+      document.removeEventListener("mousedown", handle);
+      document.removeEventListener("keydown", handle);
+    };
+  }, [stackOpen]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -77,9 +105,32 @@ export default function LandingPage() {
       <ThemeToggle className={styles.themeBtn} />
 
       <div className={styles.hero}>
-        <div className={styles.logo}>
-          <span className={styles.logoIcon}>&lt;/&gt;</span>
-          <span className={styles.logoText}>RepoGrok</span>
+        <div className={styles.logo} ref={logoRef}>
+          <button
+            type="button"
+            className={styles.logoButton}
+            onClick={() => setStackOpen((v) => !v)}
+            aria-expanded={stackOpen}
+            aria-haspopup="dialog"
+            aria-label="Show stack details"
+          >
+            <span className={styles.logoIcon}>&lt;/&gt;</span>
+            <span className={styles.logoText}>RepoGrok</span>
+          </button>
+
+          {stackOpen && (
+            <div className={styles.stackPanel} role="dialog" aria-label="Stack details">
+              <p className={styles.stackTitle}>Stack</p>
+              <dl className={styles.stackList}>
+                {STACK.map((s) => (
+                  <div key={s.label} className={styles.stackRow}>
+                    <dt>{s.label}</dt>
+                    <dd>{s.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
         </div>
 
         <p className={styles.tagline}>
@@ -114,7 +165,10 @@ export default function LandingPage() {
             <div key={step.id} className={styles.pipelineItem}>
               <div className={`${styles.step} ${stepClassName(step.id, stage, styles)}`}>
                 <span className={styles.stepIcon}>{step.icon}</span>
-                <span>{step.label}</span>
+                <span className={styles.stepText}>
+                  <span className={styles.stepLabel}>{step.label}</span>
+                  <span className={styles.stepTech}>{step.tech}</span>
+                </span>
                 <span className={styles.tooltip}>
                   <span className={styles.tooltipTitle}>{step.tooltip.title}</span>
                   {step.tooltip.body}

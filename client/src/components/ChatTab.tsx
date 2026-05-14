@@ -7,39 +7,27 @@ import styles from "./ChatTab.module.css";
 
 interface Props {
   repoId: string;
-  onOpenKeyModal: () => void;
 }
 
-function isRateLimitError(msg: string) {
-  const lower = msg.toLowerCase();
-  return lower.includes("rate limit") || lower.includes("quota");
-}
+const SUGGESTIONS = [
+  "How is the code structured?",
+  "Walk me through the core flow",
+  "What are the main exports?",
+  "How are errors handled?",
+];
 
-export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
-  const { messages, addMessage, appendToLastMessage, geminiKey } = useRepoStore();
+export default function ChatTab({ repoId }: Props) {
+  const { messages, addMessage, appendToLastMessage } = useRepoStore();
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [showKeyNudge, setShowKeyNudge] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
-
-  const SUGGESTIONS = [
-    "How is the code structured?",
-    "Walk me through the core flow",
-    "What are the main exports?",
-    "How are errors handled?",
-  ];
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => () => { cleanupRef.current?.(); }, []);
-
-  // Dismiss the nudge once the user actually sets a key
-  useEffect(() => {
-    if (geminiKey) setShowKeyNudge(false);
-  }, [geminiKey]);
 
   function handleStop() {
     cleanupRef.current?.();
@@ -69,9 +57,7 @@ export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
       (err) => {
         appendToLastMessage(`\n\n_${err}_`);
         setStreaming(false);
-        if (isRateLimitError(err) && !geminiKey) setShowKeyNudge(true);
       },
-      geminiKey,
     );
   }
 
@@ -117,14 +103,6 @@ export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
         ))}
         <div ref={bottomRef} />
       </div>
-
-      {showKeyNudge && (
-        <div className={styles.keyNudge}>
-          <span>Hitting Gemini's free quota? Bring your own key and keep going.</span>
-          <button className={styles.keyNudgeBtn} onClick={onOpenKeyModal}>Add key →</button>
-          <button className={styles.keyNudgeDismiss} onClick={() => setShowKeyNudge(false)}>✕</button>
-        </div>
-      )}
 
       <form className={styles.form} onSubmit={handleSubmit}>
         <input

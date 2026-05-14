@@ -85,16 +85,12 @@ export function streamQuery(
   onChunk: (text: string) => void,
   onDone: () => void,
   onError: (msg: string) => void,
-  geminiKey?: string | null
 ): () => void {
   const controller = new AbortController();
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (geminiKey) headers["X-Gemini-Key"] = geminiKey;
-
   fetch(`${API_BASE}/api/repos/${repoId}/query`, {
     method: "POST",
-    headers,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query, history }),
     signal: controller.signal,
   }).then(async (res) => {

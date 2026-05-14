@@ -3,27 +3,24 @@ import type { IngestProgress } from "../api";
 
 export type IngestionStage = "idle" | "fetch" | "chunk" | "embed" | "done";
 
-type State = { percent: number; message: string; stage: IngestionStage };
+type State = { percent: number; stage: IngestionStage };
 
 export function useIngestionProgress() {
-  const [state, setState] = useState<State>({ percent: 0, message: "", stage: "idle" });
+  const [state, setState] = useState<State>({ percent: 0, stage: "idle" });
 
   const onProgress = useCallback((p: IngestProgress) => {
     if (p.stage === "fetch") {
-      setState({ percent: 15, message: "Fetching repository…", stage: "fetch" });
+      setState({ percent: 15, stage: "fetch" });
     } else if (p.stage === "chunk") {
-      const msg = "total" in p && p.total
-        ? `Parsed ${p.total.toLocaleString()} chunks…`
-        : "Parsing code…";
-      setState({ percent: 30, message: msg, stage: "chunk" });
+      setState({ percent: 30, stage: "chunk" });
     } else if (p.stage === "embed") {
       const pct = 30 + Math.round((p.done / p.total) * 60);
-      setState({ percent: pct, message: `Embedding ${p.done.toLocaleString()} / ${p.total.toLocaleString()} chunks…`, stage: "embed" });
+      setState({ percent: pct, stage: "embed" });
     }
   }, []);
 
-  const onDone = useCallback(() => setState({ percent: 100, message: "Done!", stage: "done" }), []);
-  const reset = useCallback(() => setState({ percent: 0, message: "", stage: "idle" }), []);
+  const onDone = useCallback(() => setState({ percent: 100, stage: "done" }), []);
+  const reset = useCallback(() => setState({ percent: 0, stage: "idle" }), []);
 
   return { ...state, onProgress, onDone, reset };
 }

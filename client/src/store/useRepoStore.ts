@@ -9,7 +9,6 @@ interface RepoStore {
   status: Status;
   error: string | null;
   messages: ChatMessage[];
-  geminiKey: string | null;
   chunkWarning: string | null;
 
   setIngesting: () => void;
@@ -19,7 +18,6 @@ interface RepoStore {
 
   addMessage: (message: ChatMessage) => void;
   appendToLastMessage: (text: string) => void;
-  setGeminiKey: (key: string | null) => void;
 }
 
 export const useRepoStore = create<RepoStore>((set) => ({
@@ -28,7 +26,6 @@ export const useRepoStore = create<RepoStore>((set) => ({
   status: "idle",
   error: null,
   messages: [],
-  geminiKey: null,
   chunkWarning: null,
 
   setIngesting: () => set({ status: "ingesting", error: null, chunkWarning: null }),
@@ -53,6 +50,4 @@ export const useRepoStore = create<RepoStore>((set) => ({
       }
       return { messages };
     }),
-
-  setGeminiKey: (key) => set({ geminiKey: key }),
 }));

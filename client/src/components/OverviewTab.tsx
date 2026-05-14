@@ -1,6 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { RepoMetadata, FolderNode, TechStack } from "../types";
 import styles from "./OverviewTab.module.css";
+
+function topLevelDirPaths(tree: FolderNode): Set<string> {
+  const paths = new Set<string>();
+  for (const child of tree.children ?? []) {
+    if (child.type === "directory") paths.add(child.path);
+  }
+  return paths;
+}
 
 // ── Tech badges ──────────────────────────────────────────────────────────────
 
@@ -91,7 +99,12 @@ export default function OverviewTab({ metadata }: Props) {
   const baseUrl = `https://github.com/${owner}/${repo}`;
   const techGroups = groupTech(techStack);
   const hasTech = Object.keys(techGroups).length > 0;
-  const [openPaths, setOpenPaths] = useState(() => new Set<string>());
+  const [openPaths, setOpenPaths] = useState(() => topLevelDirPaths(folderTree));
+
+  // Reset to top-level-open when navigating to a different repo.
+  useEffect(() => {
+    setOpenPaths(topLevelDirPaths(folderTree));
+  }, [folderTree]);
 
   function toggle(path: string) {
     setOpenPaths((prev) => {
