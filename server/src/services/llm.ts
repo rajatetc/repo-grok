@@ -78,11 +78,11 @@ Do not make up code that isn't in the context above.`;
       parts: [{ text: m.content }],
     }));
 
-  // Gemini requires history to end with a model turn
-  const validHistory =
-    geminiHistory.length > 0 && geminiHistory[geminiHistory.length - 1].role === "user"
-      ? geminiHistory.slice(0, -1)
-      : geminiHistory;
+  // Gemini requires history to start with a user turn.
+  // Drop any leading model turns that could appear if empty assistant
+  // messages were filtered out on the client.
+  const startIdx = geminiHistory.findIndex((m) => m.role === "user");
+  const validHistory = startIdx <= 0 ? geminiHistory : geminiHistory.slice(startIdx);
 
   const chat = model.startChat({ history: validHistory });
 

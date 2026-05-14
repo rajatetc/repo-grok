@@ -205,7 +205,8 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
         typeof m === "object" &&
         (m.role === "user" || m.role === "assistant") &&
         typeof m.content === "string" &&
-        m.content.trim().length > 0
+        m.content.trim().length > 0 &&
+        m.content.length <= 8000
     )
     .slice(-10);
   const metadata = repoMetadataStore.get(repoId);
