@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRepoStore } from "../store/useRepoStore";
 import { useRecentRepos } from "../store/useRecentRepos";
@@ -36,15 +36,6 @@ const STEPS: {
 
 const STAGE_ORDER: IngestionStage[] = ["idle", "fetch", "chunk", "embed", "done"];
 
-const STACK: { label: string; value: string }[] = [
-  { label: "Frontend",   value: "React · TypeScript · Vite" },
-  { label: "Backend",    value: "Node · Express · TypeScript" },
-  { label: "Parser",     value: "Babel AST" },
-  { label: "Embeddings", value: "bge-small-en-v1.5 (384d, Cloudflare)" },
-  { label: "LLM",        value: "Gemini 2.5 Flash" },
-  { label: "Retrieval",  value: "In-memory cosine similarity" },
-];
-
 function stepClassName(stepId: IngestionStage, stage: IngestionStage, styles: Record<string, string>): string {
   if (stage === "idle") return styles.stepIdle;
   const stepIdx = STAGE_ORDER.indexOf(stepId);
@@ -61,24 +52,6 @@ export default function LandingPage() {
   const isLoading = status === "ingesting";
   const { percent, stage, onProgress, onDone, reset } = useIngestionProgress();
   const cleanupRef = useRef<(() => void) | null>(null);
-  const [stackOpen, setStackOpen] = useState(false);
-  const logoRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!stackOpen) return;
-    function handle(e: MouseEvent | KeyboardEvent) {
-      if (e instanceof KeyboardEvent && e.key === "Escape") { setStackOpen(false); return; }
-      if (e instanceof MouseEvent && logoRef.current && !logoRef.current.contains(e.target as Node)) {
-        setStackOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handle);
-    document.addEventListener("keydown", handle);
-    return () => {
-      document.removeEventListener("mousedown", handle);
-      document.removeEventListener("keydown", handle);
-    };
-  }, [stackOpen]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -105,32 +78,9 @@ export default function LandingPage() {
       <ThemeToggle className={styles.themeBtn} />
 
       <div className={styles.hero}>
-        <div className={styles.logo} ref={logoRef}>
-          <button
-            type="button"
-            className={styles.logoButton}
-            onClick={() => setStackOpen((v) => !v)}
-            aria-expanded={stackOpen}
-            aria-haspopup="dialog"
-            aria-label="Show stack details"
-          >
-            <span className={styles.logoIcon}>&lt;/&gt;</span>
-            <span className={styles.logoText}>RepoGrok</span>
-          </button>
-
-          {stackOpen && (
-            <div className={styles.stackPanel} role="dialog" aria-label="Stack details">
-              <p className={styles.stackTitle}>Stack</p>
-              <dl className={styles.stackList}>
-                {STACK.map((s) => (
-                  <div key={s.label} className={styles.stackRow}>
-                    <dt>{s.label}</dt>
-                    <dd>{s.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          )}
+        <div className={styles.logo}>
+          <span className={styles.logoIcon}>&lt;/&gt;</span>
+          <span className={styles.logoText}>RepoGrok</span>
         </div>
 
         <p className={styles.tagline}>
