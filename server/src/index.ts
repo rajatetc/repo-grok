@@ -89,35 +89,53 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing or invalid 'url' in request body" });
   }
 
+  // SSE headers — all responses (cache hit or fresh ingest) stream through here
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  function emit(event: string, data: unknown) {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  }
+
   const normalized = normalizeUrl(url);
   const cached = urlCache.get(normalized);
   if (cached && repoMetadataStore.has(cached)) {
     console.log(`Cache hit: ${url} → ${cached}`);
-    return res.status(200).json({ repoId: cached, metadata: repoMetadataStore.get(cached) });
+    emit("done", { repoId: cached, metadata: repoMetadataStore.get(cached) });
+    res.end();
+    return;
   }
 
   const repoId = randomUUID();
   const startedAt = Date.now();
 
   try {
+    emit("progress", { stage: "fetch" });
     const { files, owner, repo, branch, folderTree } = await fetchRepo(url);
 
     const sourceFiles = files.filter((f) => !f.path.endsWith("package.json"));
     if (sourceFiles.length === 0) {
-      return res.status(422).json({
-        error: "No supported files found. RepoGrok supports JavaScript, TypeScript, HTML, CSS, Vue, and Svelte files. Python, Go, Rust coming soon.",
-      });
+      emit("error", "No supported files found. RepoGrok supports JavaScript, TypeScript, HTML, CSS, Vue, and Svelte files. Python, Go, Rust coming soon.");
+      res.end();
+      return;
     }
 
     const techStack = detectTechStack(files);
     const chunks = chunkFiles(files);
+    emit("progress", { stage: "chunk", total: chunks.length });
 
     const MAX_TOTAL_CHUNKS = 3000;
-    const truncated = chunks.length > MAX_TOTAL_CHUNKS;
-    const chunksToEmbed = truncated ? chunks.slice(0, MAX_TOTAL_CHUNKS) : chunks;
+    const TYPE_PRIORITY: Record<string, number> = { component: 0, hook: 1, function: 2, class: 3, type: 4 };
+    const sorted = [...chunks].sort((a, b) => (TYPE_PRIORITY[a.type] ?? 5) - (TYPE_PRIORITY[b.type] ?? 5));
+    const truncated = sorted.length > MAX_TOTAL_CHUNKS;
+    const chunksToEmbed = truncated ? sorted.slice(0, MAX_TOTAL_CHUNKS) : sorted;
     if (truncated) console.log(`Repo has ${chunks.length} chunks — truncating to ${MAX_TOTAL_CHUNKS} for performance`);
 
-    const embeddedChunks = await embedChunks(chunksToEmbed);
+    const embeddedChunks = await embedChunks(chunksToEmbed, (done, total) => {
+      emit("progress", { stage: "embed", done, total });
+    });
 
     // --- Extra stats ---
     const linesOfCode = sourceFiles.reduce((n, f) => n + f.content.split("\n").length, 0);
@@ -165,10 +183,12 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
     const elapsedMs = Date.now() - startedAt;
     console.log(`Ingested ${owner}/${repo} in ${elapsedMs}ms — ${embeddedChunks.length} chunks`);
 
-    return res.status(201).json({ repoId, metadata });
+    emit("done", { repoId, metadata });
+    res.end();
   } catch (err) {
     console.error(`Ingestion failed for ${url}:`, err);
-    return res.status(500).json({ error: clientError(err, "Ingestion failed. Check the URL and try again.") });
+    emit("error", clientError(err, "Ingestion failed. Check the URL and try again."));
+    res.end();
   }
 });
 
@@ -241,8 +261,8 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
     }
 
     if (!clientClosed) {
-      // Use a named SSE event so the done sentinel can't be spoofed by LLM
-      // output containing the literal string `[DONE]`.
+      const sources = [...new Set(results.map((r) => r.chunk.filePath))];
+      res.write(`event: sources\ndata: ${JSON.stringify(sources)}\n\n`);
       res.write(`event: done\ndata: \n\n`);
       res.end();
     }

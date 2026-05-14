@@ -33,7 +33,10 @@ function chunkToText(chunk: CodeChunk): string {
   ].filter(Boolean).join("\n");
 }
 
-export async function embedChunks(chunks: CodeChunk[]): Promise<CodeChunk[]> {
+export async function embedChunks(
+  chunks: CodeChunk[],
+  onProgress?: (done: number, total: number) => void
+): Promise<CodeChunk[]> {
   console.log(`Embedding ${chunks.length} chunks locally…`);
   const model = await getExtractor();
 
@@ -41,8 +44,6 @@ export async function embedChunks(chunks: CodeChunk[]): Promise<CodeChunk[]> {
     const batch = chunks.slice(i, i + EMBED_BATCH_SIZE);
     const texts = batch.map(chunkToText);
 
-    // Pass the whole batch in one inference call; output.data is a flat
-    // Float32Array of shape [batch_size × HIDDEN_SIZE].
     const output = await (model as FeatureExtractionPipeline)(texts, {
       pooling: "mean",
       normalize: true,
@@ -54,6 +55,7 @@ export async function embedChunks(chunks: CodeChunk[]): Promise<CodeChunk[]> {
     }
 
     const done = Math.min(i + EMBED_BATCH_SIZE, chunks.length);
+    onProgress?.(done, chunks.length);
     if (done % 320 === 0 || done === chunks.length) {
       console.log(`  ${done}/${chunks.length}`);
     }
