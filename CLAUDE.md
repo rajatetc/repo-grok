@@ -142,6 +142,18 @@ repo-grok/
 - Error handling with try/catch at service boundaries
 - No `any` types — use proper generics and type narrowing
 
+## React & client performance
+- Hoist module-level constants (arrays, configs) outside component bodies. Fresh allocation on every render is wasted work.
+- `useState(() => init)` for any non-trivial initial value so the computation runs once, not on every render.
+- Use `useEffect` to reset derived state when a prop's identity legitimately changes.
+- Stable list keys (`item.id`, never the array index) for anything that can reorder or be filtered.
+- CSS Modules for component styles; avoid inline `style` props except for one-off computed positioning.
+
+## Pruning dead code
+- If nothing imports an export, delete it. Same for type-union members never produced, options never passed, state fields returned but never read.
+- Don't keep speculative abstractions "in case we need them later." When the need is real, the change is small. Until then, the helper just misleads the next reader about where the source of truth is.
+- Inconsistent constants (e.g. `MAX_REPOS` set to different values in two files) are bugs in waiting. Unify on one source of truth, or split the concept into two named constants if they really are different.
+
 ## Git & Commit Rules
 - **Separate commits for client and server** — never mix frontend and backend changes in one commit
 - **Scope = code area**, not phase number or ticket. Use `client`, `server`, or a specific area like `chunker`, `llm`, `OverviewTab`

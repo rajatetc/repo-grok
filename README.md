@@ -71,13 +71,13 @@ Frontend: `http://localhost:5173` · Backend: `http://localhost:3001`
 
 ## Example repos
 
+These ship pre-baked (embedded at build time) so the example chips on the landing page open instantly.
+
 | Repo | Good questions |
 |------|----------------|
 | [`reduxjs/redux`](https://github.com/reduxjs/redux) | How does createStore work? How does middleware compose? |
+| [`expressjs/express`](https://github.com/expressjs/express) | How does the routing layer work? How is middleware chained? |
 | [`axios/axios`](https://github.com/axios/axios) | How are interceptors implemented? How does cancellation work? |
-| [`colinhacks/zod`](https://github.com/colinhacks/zod) | How does schema parsing work? How are errors collected? |
-| [`pmndrs/zustand`](https://github.com/pmndrs/zustand) | How is the store created? How does the React binding work? |
-| [`immerjs/immer`](https://github.com/immerjs/immer) | How does produce() work? How are drafts tracked? |
 
 ## API
 

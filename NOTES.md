@@ -124,9 +124,12 @@ file decoded to UTF-8. Total uncompressed bytes are capped at 150 MB to prevent 
 `GEMINI_API_KEY` lives in the server's environment — clients never see it. Used only for LLM
 calls (question answering), not for indexing.
 
-Users can optionally supply their own Gemini key via the UI (stored in Zustand memory only —
-never written to disk or localStorage). It travels as an `x-gemini-key` request header and
-takes precedence over the server key. Gone when the browser tab closes.
+A single server key is shared across all users. Gemini 2.5 Flash's free tier (250 RPD) is
+comfortable headroom for a personal-project traffic volume, and skipping a per-user "bring
+your own key" flow removes a modal, a Zustand field, a rate-limit nudge banner, and an
+`x-gemini-key` request header from the surface area. If the shared quota ever becomes a real
+bottleneck (visible in server logs as 429s), reintroduce a user-supplied key path then —
+not before.
 
 ---
 
@@ -178,9 +181,9 @@ The container limits the **sum** of both, but V8 only controls its own pool. Wit
 
 2. **`NODE_OPTIONS=--max-old-space-size=400`** as a Render env var. Caps V8 heap at 400MB, leaving 112MB for native (model ~100MB, inference tensors, zlib). The more important effect is **GC timing** — V8 runs aggressive mark-and-sweep when the heap approaches its limit. A tight ceiling forces aggressive mode earlier, before native memory growth pushes the total past 512MB.
 
-3. **`MAX_REPOS = 5`** in the LRU caches (was 50). At ~6MB per repo (3000 chunks × 384-float embeddings + content strings), 50 cached repos alone would be 300MB. Five is enough for typical "explore a couple of repos in a session" usage.
+3. **Two-tier cache layout** (split out of a single LRU). Pre-baked example seeds live in a permanent `Map` (3 entries today: redux, express, axios) — they're loaded once at boot and never evicted, so landing-page example chips are always "instant click." User-ingested repos live in a bounded LRU at `USER_MAX_REPOS = 10`, which caps memory at a predictable ceiling (~60MB at ~6MB/repo for 3000 chunks × 384-float embeddings + content strings). The previous single LRU of 50 conflated the two: a burst of user ingests would silently evict the seeds, defeating the "instant" promise and forcing a re-embed on next click. The split costs one extra map lookup per `getMetadata` / `search` / `hasRepo` call — negligible.
 
-**Result:** baseline ~220MB, peak ~350MB during ingestion. Comfortable headroom on 512MB.
+**Result:** baseline ~220MB (3 seeds preloaded), peak ~350MB during a user ingest. Comfortable headroom on 512MB.
 
 **See also:** [in-memory vector store](#why-in-memory-vector-store-instead-of-a-vector-db) explains why we have the LRU cache at all.
 
@@ -249,7 +252,6 @@ Fallback to line-based splitting if Babel can't parse the file.
 - Assistant messages: left-aligned, markdown rendered (GFM)
 - Streaming via SSE — cursor blinks while response arrives
 - Multi-turn: last 10 messages sent as history on each query so follow-up questions have context
-- Rate limit nudge: banner appears only on Gemini quota errors, prompts to add own key
 
 **Dark mode:**
 - Follows system `prefers-color-scheme` by default
