@@ -6,7 +6,6 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "prebake": "tsx scripts/prebake.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

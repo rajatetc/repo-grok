@@ -67,26 +67,3 @@ export interface RepoMetadata {
   chunkBreakdown?: ChunkBreakdown;
 }
 
-export interface IngestedRepo {
-  metadata: RepoMetadata;
-  chunks: CodeChunk[];
-}
-
-export interface QueryResult {
-  answer: string;
-  relevantChunks: Array<{
-    filePath: string;
-    content: string;
-    type: ChunkType;
-    score: number;
-  }>;
-}
-
-export interface ChangeGuideResult {
-  summary: string;
-  filesToModify: Array<{
-    filePath: string;
-    reason: string;
-    suggestion: string;
-  }>;
-}

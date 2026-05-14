@@ -31,7 +31,6 @@ import { embedChunks, embedQuery, loadEmbeddingModel } from "./services/embeddin
 import { LRUCache } from "lru-cache";
 import { storeChunks, search, hasRepo } from "./services/vectorStore.js";
 import { streamAnswer, type HistoryMessage } from "./services/llm.js";
-import { loadSeeds } from "./services/seeds.js";
 import { normalizeUrl } from "./utils/normalizeUrl.js";
 import type { RepoMetadata } from "./types/index.js";
 
@@ -58,7 +57,7 @@ const MAX_REPOS = 50;
 const repoMetadataStore = new LRUCache<string, RepoMetadata>({ max: MAX_REPOS });
 
 // --- URL dedup cache ---
-// Normalized URL → repoId. Pre-populated with seeds on startup.
+// Normalized URL → repoId.
 const urlCache = new LRUCache<string, string>({ max: MAX_REPOS });
 
 // --- Rate limiters ---
@@ -74,7 +73,7 @@ const generalLimiter = rateLimit({
 
 const ingestLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 5,
+  max: 25,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many ingestion requests. Try again in an hour." },
@@ -107,9 +106,10 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
 
   const normalized = normalizeUrl(url);
   const cached = urlCache.get(normalized);
-  if (cached && repoMetadataStore.has(cached)) {
+  const cachedMeta = cached ? repoMetadataStore.get(cached) : undefined;
+  if (cached && cachedMeta) {
     console.log(`Cache hit: ${url} → ${cached}`);
-    emit("done", { repoId: cached, metadata: repoMetadataStore.get(cached) });
+    emit("done", { repoId: cached, metadata: cachedMeta });
     res.end();
     return;
   }
@@ -137,7 +137,10 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
     const sorted = [...chunks].sort((a, b) => (TYPE_PRIORITY[a.type] ?? 5) - (TYPE_PRIORITY[b.type] ?? 5));
     const truncated = sorted.length > MAX_TOTAL_CHUNKS;
     const chunksToEmbed = truncated ? sorted.slice(0, MAX_TOTAL_CHUNKS) : sorted;
-    if (truncated) console.log(`Repo has ${chunks.length} chunks — truncating to ${MAX_TOTAL_CHUNKS} for performance`);
+    if (truncated) {
+      console.log(`Repo has ${chunks.length} chunks — truncating to ${MAX_TOTAL_CHUNKS} for performance`);
+      emit("warning", `Repository has ${chunks.length.toLocaleString()} code chunks — only the top ${MAX_TOTAL_CHUNKS.toLocaleString()} are indexed. Some less important code may not appear in search results.`);
+    }
 
     const embeddedChunks = await embedChunks(chunksToEmbed, (done, total) => {
       emit("progress", { stage: "embed", done, total });
@@ -217,7 +220,7 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
   const repoId = req.params.id;
   const { query, history } = req.body ?? {};
 
-  if (!query || typeof query !== "string") {
+  if (!query || typeof query !== "string" || !query.trim()) {
     return res.status(400).json({ error: "Missing or invalid 'query' in request body" });
   }
   if (query.length > 2000) {
@@ -287,14 +290,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: clientError(err, "Internal server error") });
 });
 
-// Warm up the local embedding model and load pre-baked seeds in parallel
 loadEmbeddingModel().catch((err) => console.warn("Embedding model failed to load:", err));
-
-loadSeeds().then(({ urlMap, metadataMap }) => {
-  for (const [url, id] of urlMap) urlCache.set(url, id);
-  for (const [id, meta] of metadataMap) repoMetadataStore.set(id, meta);
-  if (urlMap.size > 0) console.log(`${urlMap.size} seed(s) ready`);
-}).catch((err) => console.warn("Seed loading failed:", err));
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

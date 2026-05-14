@@ -15,6 +15,9 @@ export function loadEmbeddingModel(): ReturnType<typeof pipeline> {
     modelPromise = pipeline("feature-extraction", MODEL).then((m) => {
       console.log("Embedding model ready.");
       return m;
+    }).catch((err) => {
+      modelPromise = null; // reset so next call retries
+      throw err;
     });
   }
   return modelPromise;
