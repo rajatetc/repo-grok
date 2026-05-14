@@ -180,9 +180,14 @@ export function detectTechStack(files: RepoFile[]): TechStack {
   const backend = allMatches(deps, BACKEND);
   const other = allMatches(deps, OTHER);
 
-  // Augment with config file signals for things not captured by deps
+  // Augment with config file signals for things not captured by deps.
+  // Only match root-level or one-level-deep config files — a next.config.js
+  // buried inside packages/foo/ shouldn't define the project's framework.
   for (const [configName, category, label] of CONFIG_SIGNALS) {
-    const found = filePaths.some((p) => p.includes(configName));
+    const found = filePaths.some((p) => {
+      const depth = (p.match(/\//g) ?? []).length;
+      return depth <= 1 && p.includes(configName);
+    });
     if (!found) continue;
 
     if (category === "framework" && !stack.framework) {
