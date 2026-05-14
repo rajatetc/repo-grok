@@ -59,8 +59,7 @@ if (!process.env.CLIENT_URL) {
 app.use(cors({ origin: clientOrigin, allowedHeaders: ["Content-Type", "x-gemini-key"] }));
 app.use(express.json({ limit: "100kb" }));
 
-// With Gemini embeddings replacing local WASM (~250MB freed), we can comfortably
-// cache more repos. 20 keeps headroom on 512MB Render with prebaked seeds preloaded.
+// 20 repos keeps headroom on 512MB Render with prebaked seeds preloaded.
 const MAX_REPOS = 20;
 
 // --- Repo metadata store ---

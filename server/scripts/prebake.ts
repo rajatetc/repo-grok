@@ -1,11 +1,9 @@
 /**
  * Generates seed files for the example repos.
  *
- * Why this exists: the deployed server uses Gemini's free-tier embedding
- * model, which is rate-limited. Re-indexing the example repos on every
- * cold boot would burn quota and slow first-visit UX. Instead we run this
- * script offline once, commit the resulting JSONs, and the server loads
- * them at startup with zero API calls.
+ * Why this exists: Re-indexing the example repos on every cold boot would
+ * slow first-visit UX. Instead we run this script offline once, commit the
+ * resulting JSONs, and the server loads them at startup with zero API calls.
  *
  * Usage:
  *   npm run prebake              # all repos missing a seed file
@@ -34,10 +32,7 @@ const ALL_EXAMPLES = [
 const MAX_TOTAL_CHUNKS = 3000;
 const TYPE_PRIORITY: Record<string, number> = { component: 0, hook: 1, function: 2, class: 3, type: 4 };
 
-// Inter-repo pause so the Gemini RPM window has time to relax between repos.
-const INTER_REPO_DELAY_MS = 60_000;
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function alreadySeeded(owner: string, repo: string): Promise<boolean> {
   try {
@@ -114,8 +109,8 @@ async function prebakeOne(owner: string, repo: string): Promise<void> {
 }
 
 async function main() {
-  if (!process.env.GEMINI_API_KEY) {
-    console.error("GEMINI_API_KEY not set.");
+  if (!process.env.CLOUDFLARE_ACCOUNT_ID || !process.env.CLOUDFLARE_AI_TOKEN) {
+    console.error("CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_AI_TOKEN not set.");
     process.exit(1);
   }
 
@@ -138,10 +133,6 @@ async function main() {
     if (!forceAll && (await alreadySeeded(owner, repo))) {
       console.log(`Skipping ${owner}/${repo} — seed already exists (pass repo name to force)`);
       continue;
-    }
-    if (processed > 0) {
-      console.log(`\nWaiting ${INTER_REPO_DELAY_MS / 1000}s for RPM window…`);
-      await sleep(INTER_REPO_DELAY_MS);
     }
     await prebakeOne(owner, repo);
     processed++;
