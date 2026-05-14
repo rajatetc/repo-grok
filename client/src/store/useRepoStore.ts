@@ -10,11 +10,12 @@ interface RepoStore {
   error: string | null;
   messages: ChatMessage[];
   geminiKey: string | null;
+  chunkWarning: string | null;
 
   setIngesting: () => void;
   setReady: (repoId: string, metadata: RepoMetadata) => void;
   setError: (error: string) => void;
-  reset: () => void;
+  setChunkWarning: (msg: string | null) => void;
 
   addMessage: (message: ChatMessage) => void;
   appendToLastMessage: (text: string) => void;
@@ -28,8 +29,9 @@ export const useRepoStore = create<RepoStore>((set) => ({
   error: null,
   messages: [],
   geminiKey: null,
+  chunkWarning: null,
 
-  setIngesting: () => set({ status: "ingesting", error: null }),
+  setIngesting: () => set({ status: "ingesting", error: null, chunkWarning: null }),
   setReady: (repoId, metadata) =>
     set((state) => ({
       repoId,
@@ -39,7 +41,7 @@ export const useRepoStore = create<RepoStore>((set) => ({
       messages: state.repoId !== repoId ? [] : state.messages,
     })),
   setError: (error) => set({ status: "error", error }),
-  reset: () => set({ repoId: null, metadata: null, status: "idle", error: null, messages: [] }),
+  setChunkWarning: (msg) => set({ chunkWarning: msg }),
 
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
   appendToLastMessage: (text) =>

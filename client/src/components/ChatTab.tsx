@@ -34,6 +34,13 @@ export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
     if (geminiKey) setShowKeyNudge(false);
   }, [geminiKey]);
 
+  function handleStop() {
+    cleanupRef.current?.();
+    cleanupRef.current = null;
+    appendToLastMessage("\n\n_Stopped._");
+    setStreaming(false);
+  }
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const query = input.trim();
@@ -108,9 +115,17 @@ export default function ChatTab({ repoId, onOpenKeyModal }: Props) {
           placeholder="Ask anything about this repo…"
           disabled={streaming}
         />
-        <button className={styles.button} type="submit" disabled={streaming || !input.trim()}>
-          {streaming ? "…" : "↑"}
-        </button>
+        {streaming ? (
+          <button
+            className={styles.button}
+            type="button"
+            onClick={handleStop}
+            title="Stop"
+            aria-label="Stop generating"
+          >■</button>
+        ) : (
+          <button className={styles.button} type="submit" disabled={!input.trim()}>↑</button>
+        )}
       </form>
     </div>
   );

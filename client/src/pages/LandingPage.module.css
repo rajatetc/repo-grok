@@ -127,12 +127,6 @@
   transition: width 1.4s ease;
 }
 
-.hint {
-  margin-top: 12px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
 .errorMsg {
   margin-top: 12px;
   font-size: 13px;
@@ -156,6 +150,7 @@
 }
 
 .step {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -164,6 +159,7 @@
   font-size: 12px;
   color: var(--text-muted);
   transition: background 0.3s, color 0.3s;
+  cursor: default;
 }
 
 /* idle = always visible, blue icons */
@@ -176,8 +172,9 @@
   background: var(--accent-dim);
 }
 
-/* future steps during loading — slightly muted */
-.stepDim { opacity: 0.4; }
+/* future steps during loading — muted via color so tooltip stays opaque */
+.stepDim,
+.stepDim .stepIcon { color: var(--border); }
 
 .stepIcon {
   font-size: 10px;
@@ -192,27 +189,6 @@
 }
 
 /* ── Tooltip ─────────────────────────────── */
-.tooltipWrap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
-.tooltipTrigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  border: 1px solid var(--icon-blue);
-  font-size: 8px;
-  cursor: default;
-  color: var(--icon-blue);
-  opacity: 0.7;
-  flex-shrink: 0;
-}
-
 .tooltip {
   position: absolute;
   top: calc(100% + 8px);
@@ -225,7 +201,7 @@
   padding: 10px 12px;
   font-size: 12px;
   line-height: 1.6;
-  color: var(--text-muted);
+  color: var(--text);
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
   pointer-events: none;
   opacity: 0;
@@ -235,7 +211,7 @@
   white-space: normal;
 }
 
-.tooltipWrap:hover .tooltip { opacity: 1; }
+.step:hover .tooltip { opacity: 1; }
 
 .tooltipTitle {
   display: block;
@@ -294,19 +270,4 @@
   color: var(--icon-blue);
 }
 
-.footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
 
-.footer a {
-  color: var(--text-muted);
-  transition: color 0.15s;
-}
-
-.footer a:hover { color: var(--text); }
-
-.footerDot { opacity: 0.4; }

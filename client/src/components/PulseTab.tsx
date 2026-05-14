@@ -1,75 +1,14 @@
-import { useState, useEffect } from "react";
+import { usePulse } from "../hooks/usePulse";
+import { timeAgo, fmtNum } from "../utils/format";
 import styles from "./PulseTab.module.css";
-
-interface GHRepo {
-  stargazers_count: number;
-  forks_count: number;
-  pushed_at: string;
-}
-
-interface GHIssue {
-  id: number;
-  title: string;
-  html_url: string;
-  labels: Array<{ name: string; color: string }>;
-  created_at: string;
-  pull_request?: unknown;
-}
-
-interface GHContributor {
-  login: string;
-  avatar_url: string;
-  html_url: string;
-  contributions: number;
-}
 
 interface Props {
   owner: string;
   repo: string;
 }
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  return `${Math.floor(days / 30)}mo ago`;
-}
-
-function fmtNum(n: number): string {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-}
-
 export default function PulseTab({ owner, repo }: Props) {
-  const [repoData, setRepoData]       = useState<GHRepo | null>(null);
-  const [issues, setIssues]           = useState<GHIssue[]>([]);
-  const [prs, setPrs]                 = useState<GHIssue[]>([]);
-  const [contributors, setContribs]   = useState<GHContributor[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState<string | null>(null);
-
-  useEffect(() => {
-    const base = `https://api.github.com/repos/${owner}/${repo}`;
-    const h = { Accept: "application/vnd.github+json" };
-
-    Promise.all([
-      fetch(base, { headers: h }).then((r) => r.json()),
-      fetch(`${base}/issues?state=open&per_page=5&sort=created&direction=desc`, { headers: h }).then((r) => r.json()),
-      fetch(`${base}/pulls?state=open&per_page=5&sort=created&direction=desc`, { headers: h }).then((r) => r.json()),
-      fetch(`${base}/contributors?per_page=5`, { headers: h }).then((r) => r.json()),
-    ])
-      .then(([rd, iss, pullList, contrib]) => {
-        setRepoData(rd as GHRepo);
-        setIssues((iss as GHIssue[]).filter((i) => !i.pull_request));
-        setPrs(pullList as GHIssue[]);
-        setContribs(contrib as GHContributor[]);
-      })
-      .catch(() => setError("Failed to load GitHub data. You may have hit the rate limit."))
-      .finally(() => setLoading(false));
-  }, [owner, repo]);
+  const { repoData, issues, prs, contributors, loading, error } = usePulse(owner, repo);
 
   if (loading) {
     return <div className={styles.center}><span className={styles.muted}>Loading…</span></div>;

@@ -3,28 +3,32 @@ import { useNavigate } from "react-router-dom";
 import { useRepoStore } from "../store/useRepoStore";
 import { ingestRepoStream } from "../api";
 import { useIngestionProgress, type IngestionStage } from "../hooks/useIngestionProgress";
-import { useTheme } from "../hooks/useTheme";
+import ThemeToggle from "../components/ThemeToggle";
 import { EXAMPLES } from "../constants";
+import Footer from "../components/Footer";
 import styles from "./LandingPage.module.css";
 
 const STEPS: {
   id: IngestionStage;
   icon: string;
   label: string;
-  tooltip?: { title: string; body: string };
+  tooltip: { title: string; body: string };
 }[] = [
-  { id: "fetch", icon: "↓", label: "Fetch" },
+  {
+    id: "fetch", icon: "↓", label: "Fetch",
+    tooltip: { title: "Fetch", body: "Downloads the repo as a single zip from GitHub. One HTTP call, all files at once." },
+  },
   {
     id: "chunk", icon: "⚙", label: "Parse",
-    tooltip: { title: "AST", body: "Babel parses your code into a tree of functions, components, and classes. We chunk by these semantic units — not arbitrary line counts." },
+    tooltip: { title: "AST", body: "Babel turns your code into a syntax tree. We split by real boundaries — functions, components, hooks, classes — not arbitrary line counts." },
   },
   {
     id: "embed", icon: "✦", label: "Embed",
-    tooltip: { title: "Embeddings", body: "Each chunk becomes 384 numbers capturing its meaning. Runs locally — no API calls. Similar code = similar vectors." },
+    tooltip: { title: "Embeddings", body: "Each chunk becomes 384 numbers that capture its meaning. Similar code = similar vectors." },
   },
   {
     id: "done", icon: "◎", label: "Chat",
-    tooltip: { title: "RAG", body: "Retrieval-Augmented Generation — your question finds the top relevant chunks via cosine similarity. Only those go to Gemini, not the whole codebase." },
+    tooltip: { title: "RAG", body: "Your question is embedded the same way. The top matching chunks go to Gemini — not the whole codebase. That's retrieval-augmented generation." },
   },
 ];
 
@@ -40,8 +44,7 @@ function stepClassName(stepId: IngestionStage, stage: IngestionStage, styles: Re
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const { setIngesting, setReady, setError, status, error } = useRepoStore();
-  const { theme, toggle } = useTheme();
+  const { setIngesting, setReady, setError, setChunkWarning, status, error } = useRepoStore();
   const [url, setUrl] = useState("");
   const isLoading = status === "ingesting";
   const { percent, message, stage, onProgress, onDone, reset } = useIngestionProgress();
@@ -61,15 +64,14 @@ export default function LandingPage() {
         setReady(repoId, metadata);
         setTimeout(() => navigate(`/repo/${repoId}`), 300);
       },
-      (err) => setError(err)
+      (err) => setError(err),
+      (msg) => setChunkWarning(msg),
     );
   }
 
   return (
     <div className={styles.page}>
-      <button className={styles.themeBtn} onClick={toggle} title="Toggle theme">
-        {theme === "dark" ? "☀" : "☾"}
-      </button>
+      <ThemeToggle className={styles.themeBtn} />
 
       <div className={styles.hero}>
         <div className={styles.logo}>
@@ -110,15 +112,10 @@ export default function LandingPage() {
               <div className={`${styles.step} ${stepClassName(step.id, stage, styles)}`}>
                 <span className={styles.stepIcon}>{step.icon}</span>
                 <span>{step.label}</span>
-                {step.tooltip && (
-                  <span className={styles.tooltipWrap}>
-                    <span className={styles.tooltipTrigger}>?</span>
-                    <span className={styles.tooltip}>
-                      <span className={styles.tooltipTitle}>{step.tooltip.title}</span>
-                      {step.tooltip.body}
-                    </span>
-                  </span>
-                )}
+                <span className={styles.tooltip}>
+                  <span className={styles.tooltipTitle}>{step.tooltip.title}</span>
+                  {step.tooltip.body}
+                </span>
               </div>
               {i < STEPS.length - 1 && <span className={styles.stepArrow}>→</span>}
             </div>
@@ -144,15 +141,7 @@ export default function LandingPage() {
         </div>
       </div>
 
-      <footer className={styles.footer}>
-        <span>Built by <a href="https://rajatgupta.site/" target="_blank" rel="noreferrer">Rajat Gupta</a></span>
-        <span className={styles.footerDot}>·</span>
-        <a href="https://github.com/rajatetc" target="_blank" rel="noreferrer">GitHub</a>
-        <span className={styles.footerDot}>·</span>
-        <a href="https://linkedin.com/in/rajatetc" target="_blank" rel="noreferrer">LinkedIn</a>
-        <span className={styles.footerDot}>·</span>
-        <a href="https://x.com/rajatetc" target="_blank" rel="noreferrer">X</a>
-      </footer>
+      <Footer />
     </div>
   );
 }

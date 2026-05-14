@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useRepoStore } from "../store/useRepoStore";
-import { useTheme } from "../hooks/useTheme";
+import ThemeToggle from "../components/ThemeToggle";
 import OverviewTab from "../components/OverviewTab";
 import PulseTab from "../components/PulseTab";
 import ChatTab from "../components/ChatTab";
+import Footer from "../components/Footer";
 import styles from "./RepoPage.module.css";
 
 export default function RepoPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { metadata, geminiKey, setGeminiKey } = useRepoStore();
-  const { theme, toggle } = useTheme();
+  const { metadata, geminiKey, setGeminiKey, chunkWarning, setChunkWarning } = useRepoStore();
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [keyInput, setKeyInput]         = useState("");
   const [activeTab, setActiveTab]       = useState<"overview" | "pulse">("overview");
@@ -40,9 +40,7 @@ export default function RepoPage() {
           </span>
         </div>
         <div className={styles.navRight}>
-          <button className={styles.iconBtn} onClick={toggle} title="Toggle theme">
-            {theme === "dark" ? "☀" : "☾"}
-          </button>
+          <ThemeToggle className={styles.iconBtn} />
           <button
             className={`${styles.keyBtn} ${geminiKey ? styles.keyBtnActive : ""}`}
             onClick={openKeyModal}
@@ -51,6 +49,17 @@ export default function RepoPage() {
           </button>
         </div>
       </nav>
+
+      {chunkWarning && (
+        <div className={styles.warningBanner}>
+          <span>{chunkWarning}</span>
+          <button
+            className={styles.warningDismiss}
+            onClick={() => setChunkWarning(null)}
+            aria-label="Dismiss"
+          >✕</button>
+        </div>
+      )}
 
       {/* ── Body ────────────────────────────── */}
       <div className={styles.body}>
@@ -75,16 +84,7 @@ export default function RepoPage() {
         </main>
       </div>
 
-      {/* ── Footer ───────────────────────── */}
-      <footer className={styles.footer}>
-        <span>Built by <a href="https://rajatgupta.site/" target="_blank" rel="noreferrer">Rajat Gupta</a></span>
-        <span className={styles.footerDot}>·</span>
-        <a href="https://github.com/rajatetc" target="_blank" rel="noreferrer">GitHub</a>
-        <span className={styles.footerDot}>·</span>
-        <a href="https://linkedin.com/in/rajatetc" target="_blank" rel="noreferrer">LinkedIn</a>
-        <span className={styles.footerDot}>·</span>
-        <a href="https://x.com/rajatetc" target="_blank" rel="noreferrer">X</a>
-      </footer>
+      <Footer />
 
       {/* ── API Key modal ─────────────────── */}
       {showKeyModal && (

@@ -6,6 +6,32 @@
 }
 
 
+/* ── Warning banner ─────────────────── */
+.warningBanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--accent-dim);
+  color: var(--text);
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.warningDismiss {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+.warningDismiss:hover { color: var(--text); }
+
 /* ── Nav ─────────────────────────────── */
 .nav {
   display: flex;
@@ -188,23 +214,6 @@
 }
 .modalCancel:hover { color: var(--text); }
 
-/* ── Footer ───────────────────────────── */
-.footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: 8px 16px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-  background: var(--bg-card);
-}
-
-.footer a { color: var(--text-muted); transition: color 0.15s; }
-.footer a:hover { color: var(--text); }
-.footerDot { opacity: 0.4; }
 
 /* ── Dark mode overrides ─────────────── */
 :global([data-theme="dark"]) .keyBtnActive { background: #052e16; color: #4ade80; border-color: #166534; }

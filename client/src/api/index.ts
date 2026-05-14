@@ -42,7 +42,8 @@ export function ingestRepoStream(
   url: string,
   onProgress: (p: IngestProgress) => void,
   onDone: (repoId: string, metadata: RepoMetadata) => void,
-  onError: (msg: string) => void
+  onError: (msg: string) => void,
+  onWarning?: (msg: string) => void
 ): () => void {
   const controller = new AbortController();
 
@@ -90,6 +91,9 @@ export function ingestRepoStream(
           if (pendingEvent === "progress") {
             try { onProgress(JSON.parse(raw)); } catch { /* ignore */ }
           }
+          if (pendingEvent === "warning") {
+            try { onWarning?.(JSON.parse(raw)); } catch { /* ignore */ }
+          }
           pendingEvent = "";
         } else if (line === "") {
           pendingEvent = "";
@@ -101,15 +105,6 @@ export function ingestRepoStream(
   });
 
   return () => controller.abort();
-}
-
-export async function getOverview(repoId: string): Promise<RepoMetadata> {
-  try {
-    const { data } = await client.get(`/api/repos/${repoId}/overview`);
-    return data;
-  } catch (err) {
-    throw new Error(extractError(err));
-  }
 }
 
 
