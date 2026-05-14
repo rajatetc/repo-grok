@@ -6,8 +6,8 @@ const LLM_MODEL = "gemini-2.5-flash";
 
 export type HistoryMessage = { role: "user" | "assistant"; content: string };
 
-function getModel(apiKey?: string, systemInstruction?: string) {
-  const key = apiKey || process.env.GEMINI_API_KEY;
+function getModel(systemInstruction?: string) {
+  const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error("No Gemini API key available.");
   const genAI = new GoogleGenerativeAI(key);
   return genAI.getGenerativeModel({
@@ -46,7 +46,7 @@ function buildRepoContext(metadata: RepoMetadata): string {
 function buildContext(results: SearchResult[]): string {
   return results
     .map((r, i) => {
-      const header = `[${i + 1}] ${r.chunk.filePath} (${r.chunk.type}${r.chunk.name ? ` • ${r.chunk.name}` : ""}) — relevance: ${(r.score * 100).toFixed(0)}%`;
+      const header = `[${i + 1}] ${r.chunk.filePath} (${r.chunk.type}${r.chunk.name ? ` • ${r.chunk.name}` : ""})`;
       return `${header}\n\`\`\`\n${r.chunk.content}\n\`\`\``;
     })
     .join("\n\n");
@@ -56,7 +56,6 @@ export async function* streamAnswer(
   query: string,
   results: SearchResult[],
   metadata: RepoMetadata,
-  apiKey?: string,
   history: HistoryMessage[] = []
 ): AsyncGenerator<string> {
   const systemInstruction = `You are an expert code assistant helping a developer understand a specific codebase. You ONLY answer questions related to this repository:
@@ -72,7 +71,7 @@ RULES:
 - Do not make up code that isn't in the context above.
 - Do not generate code for unrelated projects or tasks.`;
 
-  const model = getModel(apiKey, systemInstruction);
+  const model = getModel(systemInstruction);
 
   // Convert to Gemini format: "assistant" → "model", skip empty messages
   const geminiHistory = history

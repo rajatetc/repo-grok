@@ -69,13 +69,6 @@ async function callCloudflare(texts: string[], attempt = 0): Promise<number[][]>
   return json.result.data;
 }
 
-// Retained for API symmetry with index.ts startup.
-export async function loadEmbeddingModel(): Promise<void> {
-  if (!ACCOUNT_ID || !TOKEN) {
-    console.warn("WARN: CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_AI_TOKEN not set — embeddings will fail.");
-  }
-}
-
 export async function embedChunks(
   chunks: CodeChunk[],
   onProgress?: (done: number, total: number) => void

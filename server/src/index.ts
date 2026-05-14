@@ -27,7 +27,7 @@ function clientError(err: unknown, fallback: string): string {
 import { fetchRepo } from "./services/github.js";
 import { chunkFiles } from "./services/chunker.js";
 import { detectTechStack } from "./utils/techDetector.js";
-import { embedChunks, embedQuery, loadEmbeddingModel } from "./services/embeddings.js";
+import { embedChunks, embedQuery } from "./services/embeddings.js";
 import { LRUCache } from "lru-cache";
 import { storeChunks, search, hasRepo } from "./services/vectorStore.js";
 import { streamAnswer, type HistoryMessage } from "./services/llm.js";
@@ -56,18 +56,25 @@ const clientOrigin = process.env.CLIENT_URL ?? "http://localhost:5173";
 if (!process.env.CLIENT_URL) {
   console.warn("WARN: CLIENT_URL not set, defaulting to http://localhost:5173");
 }
-app.use(cors({ origin: clientOrigin, allowedHeaders: ["Content-Type", "x-gemini-key"] }));
+app.use(cors({ origin: clientOrigin }));
 app.use(express.json({ limit: "100kb" }));
 
-// 20 repos keeps headroom on 512MB Render with prebaked seeds preloaded.
-const MAX_REPOS = 20;
+// Seeds are pinned for the process lifetime so example-chip clicks stay
+// "instant." User-ingested repos live in a bounded LRU sized to stay
+// comfortable on Render's 512MB free tier (see NOTES.md → Render 512MB tuning).
+const USER_MAX_REPOS = 10;
 
-// --- Repo metadata store ---
-const repoMetadataStore = new LRUCache<string, RepoMetadata>({ max: MAX_REPOS });
+const seedMetadata = new Map<string, RepoMetadata>();
+const seedUrls = new Map<string, string>();
+const userMetadata = new LRUCache<string, RepoMetadata>({ max: USER_MAX_REPOS });
+const userUrls = new LRUCache<string, string>({ max: USER_MAX_REPOS });
 
-// --- URL dedup cache ---
-// Normalized URL → repoId.
-const urlCache = new LRUCache<string, string>({ max: MAX_REPOS });
+function getMetadata(id: string): RepoMetadata | undefined {
+  return seedMetadata.get(id) ?? userMetadata.get(id);
+}
+function getRepoIdByUrl(normalizedUrl: string): string | undefined {
+  return seedUrls.get(normalizedUrl) ?? userUrls.get(normalizedUrl);
+}
 
 // --- Rate limiters ---
 // General limiter: protects against accidental loops / abusive clients.
@@ -114,8 +121,8 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
   }
 
   const normalized = normalizeUrl(url);
-  const cached = urlCache.get(normalized);
-  const cachedMeta = cached ? repoMetadataStore.get(cached) : undefined;
+  const cached = getRepoIdByUrl(normalized);
+  const cachedMeta = cached ? getMetadata(cached) : undefined;
   if (cached && cachedMeta) {
     console.log(`Cache hit: ${url} → ${cached}`);
     emit("done", { repoId: cached, metadata: cachedMeta });
@@ -138,7 +145,6 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
     }
 
     const techStack = detectTechStack(files);
-    emit("progress", { stage: "chunk" });
     const chunks = chunkFiles(files);
     emit("progress", { stage: "chunk", total: chunks.length });
 
@@ -196,8 +202,8 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
       chunkBreakdown,
     };
     storeChunks(repoId, embeddedChunks);
-    repoMetadataStore.set(repoId, metadata);
-    urlCache.set(normalized, repoId);
+    userMetadata.set(repoId, metadata);
+    userUrls.set(normalized, repoId);
 
     const elapsedMs = Date.now() - startedAt;
     console.log(`Ingested ${owner}/${repo} in ${elapsedMs}ms — ${embeddedChunks.length} chunks`);
@@ -214,7 +220,7 @@ app.post("/api/repos", ingestLimiter, async (req: Request, res: Response) => {
 // GET /api/repos/:id/overview — repo overview
 app.get("/api/repos/:id/overview", async (req: Request, res: Response) => {
   try {
-    const metadata = repoMetadataStore.get(req.params.id);
+    const metadata = getMetadata(req.params.id);
     if (!metadata) {
       return res.status(404).json({ error: "Repo not found. It may have expired or never been ingested." });
     }
@@ -248,7 +254,7 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
         m.content.length <= 8000
     )
     .slice(-10);
-  const metadata = repoMetadataStore.get(repoId);
+  const metadata = getMetadata(repoId);
   if (!metadata || !hasRepo(repoId)) {
     return res.status(404).json({ error: "Repo not found. It may have expired or never been ingested." });
   }
@@ -265,16 +271,18 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
     clientClosed = true;
   });
 
-  const userApiKey = req.headers["x-gemini-key"] as string | undefined;
-  if (userApiKey && !/^AIza[0-9A-Za-z_-]{35}$/.test(userApiKey)) {
-    return res.status(400).json({ error: "Invalid Gemini API key format." });
-  }
-
   try {
     const queryVector = await embedQuery(query);
     const results = search(repoId, queryVector);
 
-    for await (const textChunk of streamAnswer(query, results, metadata, userApiKey || undefined, safeHistory)) {
+    // Score visibility for debugging weak retrieval. Top-3 scores tell you at
+    // a glance whether the query matched anything in the repo at all — useful
+    // when an answer feels vague and you want to know if it's the LLM or the
+    // retrieval that fell short.
+    const topScores = results.slice(0, 3).map((r) => r.score.toFixed(2)).join(", ");
+    console.log(`Query "${query.slice(0, 60)}${query.length > 60 ? "…" : ""}" → ${results.length} chunks, top scores: [${topScores}]`);
+
+    for await (const textChunk of streamAnswer(query, results, metadata, safeHistory)) {
       if (clientClosed) return;
       res.write(`data: ${JSON.stringify(textChunk)}\n\n`);
     }
@@ -300,11 +308,9 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: clientError(err, "Internal server error") });
 });
 
-loadEmbeddingModel().catch((err) => console.warn("Embedding model check failed:", err));
-
 loadSeeds().then(({ urlMap, metadataMap }) => {
-  for (const [url, id] of urlMap) urlCache.set(url, id);
-  for (const [id, meta] of metadataMap) repoMetadataStore.set(id, meta);
+  for (const [url, id] of urlMap) seedUrls.set(url, id);
+  for (const [id, meta] of metadataMap) seedMetadata.set(id, meta);
   if (urlMap.size > 0) console.log(`${urlMap.size} seed(s) ready`);
 }).catch((err) => console.warn("Seed loading failed:", err)).finally(() => {
   app.listen(PORT, () => {

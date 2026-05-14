@@ -96,6 +96,35 @@ describe("chunkFile — type detection", () => {
   });
 });
 
+describe("chunkFile — multiple declarations", () => {
+  it("emits separate chunks for imports + class + function + type in one file", () => {
+    const chunks = chunkFile(file("src/mixed.ts", `
+      import { useState } from "react";
+      import { z } from "zod";
+
+      export type User = { id: string; name: string };
+
+      export class AuthService {
+        login(email: string) { return true; }
+      }
+
+      export function greet(user: User) {
+        return \`hello \${user.name}\`;
+      }
+    `));
+
+    const importChunk = chunks.find((c) => c.type === "import");
+    const typeChunk   = chunks.find((c) => c.name === "User");
+    const classChunk  = chunks.find((c) => c.name === "AuthService");
+    const fnChunk     = chunks.find((c) => c.name === "greet");
+
+    expect(importChunk).toBeDefined();
+    expect(typeChunk?.type).toBe("type");
+    expect(classChunk?.type).toBe("class");
+    expect(fnChunk?.type).toBe("function");
+  });
+});
+
 describe("chunkFile — line numbers", () => {
   it("records correct start line for a function", () => {
     const chunks = chunkFile(file("src/fn.ts", `

@@ -35,7 +35,7 @@ export async function loadSeeds(): Promise<LoadedSeeds> {
       const raw = await readFile(join(SEEDS_DIR, file), "utf-8");
       const seed: SeedFile = JSON.parse(raw);
 
-      storeChunks(seed.repoId, seed.chunks);
+      storeChunks(seed.repoId, seed.chunks, true);
       metadataMap.set(seed.repoId, seed.metadata);
       urlMap.set(normalizeUrl(seed.url), seed.repoId);
 

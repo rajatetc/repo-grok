@@ -18,7 +18,6 @@ export type ChunkType =
   | "class"
   | "type"
   | "import"
-  | "export"
   | "other";
 
 export interface CodeChunk {

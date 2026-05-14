@@ -1,5 +1,5 @@
 import { LRUCache } from "lru-cache";
-import type { CodeChunk, ChunkType } from "../types/index.js";
+import type { CodeChunk } from "../types/index.js";
 
 export interface SearchResult {
   chunk: CodeChunk;
@@ -9,13 +9,15 @@ export interface SearchResult {
 export interface SearchOptions {
   topK?: number;        // how many results to return (default 8)
   minScore?: number;    // minimum similarity threshold (default 0.3)
-  filterType?: ChunkType[]; // optionally restrict to specific chunk types
 }
 
-const MAX_REPOS = 50;
-
-// In-memory store: one entry per ingested repo, evicts LRU when full
-const store = new LRUCache<string, CodeChunk[]>({ max: MAX_REPOS });
+// Seeds (example repos pre-baked at build time) are pinned for the lifetime
+// of the process so the landing-page example chips are always "instant click."
+// User-ingested repos live in a bounded LRU so total memory stays predictable
+// on Render's 512MB free tier (see NOTES.md → Render 512MB tuning).
+const USER_MAX_REPOS = 10;
+const seedChunks = new Map<string, CodeChunk[]>();
+const userChunks = new LRUCache<string, CodeChunk[]>({ max: USER_MAX_REPOS });
 
 // --- Cosine similarity ---
 // Measures the angle between two vectors.
@@ -36,11 +38,17 @@ function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 // Store all embedded chunks for a repo. Called once after ingestion completes.
-export function storeChunks(repoId: string, chunks: CodeChunk[]): void {
-  // Only keep chunks that actually have embeddings
+// Pass isSeed=true for pre-baked example repos — they bypass the LRU and stay
+// pinned for the process lifetime.
+export function storeChunks(repoId: string, chunks: CodeChunk[], isSeed = false): void {
   const embedded = chunks.filter((c) => c.embedding && c.embedding.length > 0);
-  store.set(repoId, embedded);
-  console.log(`Stored ${embedded.length} embedded chunks for repo ${repoId}`);
+  if (isSeed) seedChunks.set(repoId, embedded);
+  else userChunks.set(repoId, embedded);
+  console.log(`Stored ${embedded.length} embedded chunks for repo ${repoId}${isSeed ? " (seed)" : ""}`);
+}
+
+function getRepoChunks(repoId: string): CodeChunk[] | undefined {
+  return seedChunks.get(repoId) ?? userChunks.get(repoId);
 }
 
 // Search for the most relevant chunks given a query embedding vector.
@@ -51,17 +59,12 @@ export function search(
   queryEmbedding: number[],
   options: SearchOptions = {}
 ): SearchResult[] {
-  const { topK = 8, minScore = 0.3, filterType } = options;
+  const { topK = 8, minScore = 0.3 } = options;
 
-  const chunks = store.get(repoId);
+  const chunks = getRepoChunks(repoId);
   if (!chunks || chunks.length === 0) return [];
 
-  let candidates = chunks;
-  if (filterType && filterType.length > 0) {
-    candidates = chunks.filter((c) => filterType.includes(c.type));
-  }
-
-  return candidates
+  return chunks
     .map((chunk) => ({
       chunk,
       score: cosineSimilarity(queryEmbedding, chunk.embedding!),
@@ -72,13 +75,9 @@ export function search(
 }
 
 export function getChunks(repoId: string): CodeChunk[] {
-  return store.get(repoId) ?? [];
+  return getRepoChunks(repoId) ?? [];
 }
 
 export function hasRepo(repoId: string): boolean {
-  return store.has(repoId);
-}
-
-export function deleteRepo(repoId: string): void {
-  store.delete(repoId);
+  return seedChunks.has(repoId) || userChunks.has(repoId);
 }
