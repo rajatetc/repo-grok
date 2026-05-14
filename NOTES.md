@@ -51,7 +51,7 @@ Switched to `@xenova/transformers` running `Xenova/all-MiniLM-L6-v2` locally:
 - **No GEMINI_API_KEY required** to run the server or pre-bake seeds
 - Model loads once into the process on startup (promise-cached singleton), shared by all requests
 
-Gemini is still used for one thing only: the LLM (`gemini-2.0-flash`) that reads retrieved chunks
+Gemini is still used for one thing only: the LLM (`gemini-2.5-flash`) that reads retrieved chunks
 and answers questions. That's a much lower call volume (one per user question, not one per chunk).
 
 **Trade-off:** local inference is CPU-bound. On a cold server the first embedding takes ~1–2s
@@ -199,6 +199,7 @@ Fallback to line-based splitting if Babel can't parse the file.
 - User messages: right-aligned pill bubble
 - Assistant messages: left-aligned, markdown rendered (GFM)
 - Streaming via SSE — cursor blinks while response arrives
+- Multi-turn: last 10 messages sent as history on each query so follow-up questions have context
 - Rate limit nudge: banner appears only on Gemini quota errors, prompts to add own key
 
 **Dark mode:**

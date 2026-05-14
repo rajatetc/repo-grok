@@ -36,14 +36,11 @@ for multi-turn conversations.
 ---
 
 ## Tests
-No tests currently. Best candidates:
+Unit tests exist for `parseGitHubUrl`, `detectTechStack`, and `chunkFile` (34 tests total via Vitest).
 
-- **`chunker.ts`** — pure function (files in → chunks out), easy to unit test; good coverage of the component/hook/class/type detection logic
-- **`techDetector.ts`** — pure function; trivial to assert that React/Redux/Tailwind repos detect correctly
-- **`parseGitHubUrl`** in `github.ts` — many edge cases (trailing slash, `.git` suffix, branch in URL, invalid chars); a natural unit test target
-- **Integration:** a small fixture repo (10–20 JS files committed to `server/fixtures/`) that runs through the full ingest → embed → query pipeline and asserts the top result is relevant
-
-Even 10–15 focused tests would meaningfully cover the most critical logic paths.
+**Still missing:**
+- **Integration test:** a small fixture repo (10–20 JS files committed to `server/fixtures/`) that runs the full ingest → embed → search pipeline and asserts top result is relevant
+- **LLM tests:** hard to unit test; would require mocking the Gemini SDK stream
 
 ---
 

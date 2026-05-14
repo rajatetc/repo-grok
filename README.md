@@ -11,7 +11,7 @@ AI-powered codebase explainer. Paste a GitHub URL and get an interactive overvie
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - A free [Gemini API key](https://aistudio.google.com/apikey) — only needed for chat, not for indexing
 - A GitHub personal access token (optional — raises API rate limit from 60 to 5000 req/hr)
 
@@ -58,7 +58,7 @@ Frontend: `http://localhost:5173` · Backend: `http://localhost:3001`
 
 - **Overview tab** — file count, lines of code, dependencies, tech stack badges, collapsible folder tree
 - **Pulse tab** — live GitHub data: stars, forks, last push, open issues, open PRs, top contributors
-- **Chat** — ask anything about the codebase; answers are grounded in actual source chunks
+- **Chat** — ask anything about the codebase; multi-turn with history so follow-up questions have context
 - **Dark mode** — follows system preference, manual toggle persisted in localStorage
 
 ## Example repos
@@ -93,7 +93,7 @@ Frontend: `http://localhost:5173` · Backend: `http://localhost:3001`
 | Backend | Node.js + Express + TypeScript |
 | AST parsing | Babel (`@babel/parser`, `@babel/traverse`) |
 | Embeddings | `@xenova/transformers` — `all-MiniLM-L6-v2`, runs locally |
-| LLM | Gemini 2.0 Flash (free tier) |
+| LLM | Gemini 2.5 Flash (free tier) |
 | Vector search | In-memory cosine similarity |
 | GitHub API | Octokit + direct zipball download |
 
