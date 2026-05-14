@@ -5,7 +5,10 @@ import type { CodeChunk } from "../types/index.js";
 // Downloads once on first server boot and stays in memory — no API calls ever.
 const MODEL = "Xenova/all-MiniLM-L6-v2";
 const HIDDEN_SIZE = 384;
-const EMBED_BATCH_SIZE = 64;
+// Batch size kept low to fit inside Render free tier's 512MB container.
+// ONNX inference allocates tensors proportional to batch * tokens * hidden_size,
+// which at batch=64 spiked over 200MB and OOM'd. 16 is the safe ceiling.
+const EMBED_BATCH_SIZE = 16;
 
 let modelPromise: ReturnType<typeof pipeline> | null = null;
 
