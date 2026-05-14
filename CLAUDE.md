@@ -162,6 +162,7 @@ repo-grok/
   - Types: `feat`, `fix`, `refactor`, `style`, `chore`
   - Examples: `feat(client): add dark mode toggle`, `fix(server): cap zip extraction at 150MB`
 - One concern per PR — don't bundle unrelated changes
+- **Subject-line only for routine work.** Add a body only when a non-obvious trade-off or constraint drove the decision and isn't already captured in the diff, a code comment, or NOTES.md. Bodies should be one short paragraph, not a multi-paragraph story.
 - Confirm before pushing; never force-push main
 
 ## Documentation Rules
