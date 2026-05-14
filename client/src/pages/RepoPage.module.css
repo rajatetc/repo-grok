@@ -129,3 +129,17 @@
   flex-direction: column;
 }
 
+/* ── Mobile: stack sidebar above chat ── */
+@media (max-width: 768px) {
+  .body { flex-direction: column; }
+
+  .sidebar {
+    width: 100%;
+    max-height: 45vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .chatArea { min-height: 0; }
+}
+
