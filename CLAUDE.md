@@ -87,39 +87,51 @@ repo-grok/
 ├── server/
 │   ├── src/
 │   │   ├── services/
-│   │   │   ├── github.ts       # Zipball downloader, URL parser, folder tree builder
-│   │   │   ├── chunker.ts      # Babel AST chunker — semantic splitting
-│   │   │   ├── embeddings.ts   # Cloudflare Workers AI (bge-small-en-v1.5)
-│   │   │   ├── vectorStore.ts  # In-memory cosine similarity search
-│   │   │   └── llm.ts          # Gemini Flash — streaming RAG answers
+│   │   │   ├── github.ts         # Zipball downloader, URL parser, folder tree builder
+│   │   │   ├── chunker.ts        # Babel AST chunker — semantic splitting
+│   │   │   ├── embeddings.ts     # Cloudflare Workers AI (bge-small-en-v1.5)
+│   │   │   ├── vectorStore.ts    # In-memory cosine similarity search
+│   │   │   ├── lexicalSearch.ts  # BM25-style fallback when embed quota is exhausted
+│   │   │   ├── seeds.ts          # Pre-baked example repos + canned-answer short-circuit
+│   │   │   └── llm.ts            # Gemini Flash — streaming RAG answers
 │   │   ├── utils/
-│   │   │   ├── techDetector.ts # Tech stack detection
-│   │   │   ├── normalizeUrl.ts # Canonical URL form for dedup cache
-│   │   │   └── packageJson.ts  # Find + parse package.json from repo files
+│   │   │   ├── techDetector.ts   # Tech stack detection
+│   │   │   └── normalizeUrl.ts   # Canonical URL form for dedup cache
 │   │   ├── types/
-│   │   │   └── index.ts        # Shared types
-│   │   └── index.ts            # Express server + routes
+│   │   │   └── index.ts          # Shared types
+│   │   └── index.ts              # Express server + routes
+│   ├── scripts/
+│   │   └── prebake.ts            # Generates seed JSONs for the example repos
+│   ├── seeds/                    # Pre-embedded example repos (committed JSON)
+│   ├── fixtures/                 # Integration-test fixture repo
 │   ├── package.json
 │   └── tsconfig.json
 ├── client/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── OverviewTab.tsx  # Stats, tech badges, folder tree
-│   │   │   ├── PulseTab.tsx     # Live GitHub data (stars, issues, PRs, contributors)
-│   │   │   ├── ChatTab.tsx      # SSE-streamed chat
-│   │   │   ├── ThemeToggle.tsx  # Reusable dark/light toggle button
-│   │   │   └── Footer.tsx       # Shared footer (Built by · GitHub · LinkedIn · X)
+│   │   │   ├── OverviewTab.tsx   # Stats, tech badges, folder tree
+│   │   │   ├── PulseTab.tsx      # Live GitHub data (stars, issues, PRs, contributors)
+│   │   │   ├── ChatTab.tsx       # SSE-streamed chat
+│   │   │   ├── ErrorBoundary.tsx # Top-level React error boundary
+│   │   │   ├── ThemeToggle.tsx   # Reusable dark/light toggle button
+│   │   │   └── Footer.tsx        # Shared footer (Built by · GitHub · LinkedIn · X)
 │   │   ├── pages/
 │   │   │   ├── LandingPage.tsx
-│   │   │   └── RepoPage.tsx     # Two-column layout: sidebar tabs + chat
+│   │   │   └── RepoPage.tsx      # Two-column layout: sidebar tabs + chat
 │   │   ├── hooks/
-│   │   │   ├── useTheme.ts            # Dark mode — localStorage + system preference
+│   │   │   ├── useTheme.ts             # Dark mode — localStorage + system preference
 │   │   │   ├── useIngestionProgress.ts
-│   │   │   └── usePulse.ts            # GitHub repo + issues + PRs + contributors fetcher
+│   │   │   └── usePulse.ts             # GitHub repo + issues + PRs + contributors fetcher
+│   │   ├── api/
+│   │   │   └── index.ts          # Fetch wrappers + SSE parsing for ingest/query
 │   │   ├── utils/
-│   │   │   └── format.ts        # timeAgo, fmtNum helpers
-│   │   └── store/
-│   │       └── useRepoStore.ts  # Zustand — metadata, messages, Gemini key
+│   │   │   └── format.ts         # timeAgo, fmtNum helpers
+│   │   ├── store/
+│   │   │   ├── useRepoStore.ts   # Zustand — repo metadata, chat messages, ingest status
+│   │   │   └── useRecentRepos.ts # Recently-viewed repos, persisted in localStorage
+│   │   ├── types/
+│   │   │   └── index.ts          # Shared client types
+│   │   └── constants.ts          # Client-wide constants (limits, URLs)
 │   ├── package.json
 │   └── vite.config.ts
 ├── CLAUDE.md
