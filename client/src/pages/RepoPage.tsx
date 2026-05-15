@@ -18,20 +18,20 @@ export default function RepoPage() {
   // user actually clicks the tab, then keep it mounted so the fetched data
   // survives tab toggles for the rest of the session.
   const [pulseEverOpened, setPulseEverOpened] = useState(false);
-  const [loading, setLoading]     = useState(!metadata || metadata.id !== id);
+  const loading = !metadata || metadata.id !== id;
 
   useEffect(() => {
     if (!id) { navigate("/", { replace: true }); return; }
-    if (metadata && metadata.id === id) { setLoading(false); return; }
+    if (metadata && metadata.id === id) return;
 
     fetch(`${API_BASE}/api/repos/${id}/overview`)
       .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data) => { setReady(id, data); setLoading(false); })
+      .then((data) => setReady(id, data))
       .catch(() => navigate("/", { replace: true }));
-  }, [id]);
+  }, [id, metadata, navigate, setReady]);
 
   if (loading || !metadata) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "var(--text-muted)", fontSize: 14 }}>
+    <div className={styles.loadingState}>
       Loading…
     </div>
   );

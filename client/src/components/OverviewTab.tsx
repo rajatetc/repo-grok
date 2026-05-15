@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { RepoMetadata, FolderNode, TechStack } from "../types";
 import styles from "./OverviewTab.module.css";
 
@@ -74,7 +74,7 @@ function TreeNode({ node, depth, openPaths, toggle, baseUrl, branch }: TreeNodeP
   return (
     <div>
       {depth > 0 && (
-        <div className={styles.dir} style={indent} onClick={() => toggle(node.path)}>
+        <div className={styles.dir} style={indent} onClick={() => toggle(node.path)} role="button" aria-expanded={isOpen} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(node.path); } }}>
           <span className={styles.dirIcon}>{isOpen ? "▾" : "▸"}</span>{" "}
           <a href={`${baseUrl}/tree/${branch}/${node.path}`} target="_blank" rel="noreferrer" className={styles.fileLink}
              onClick={(e) => e.stopPropagation()}>
@@ -102,9 +102,12 @@ export default function OverviewTab({ metadata }: Props) {
   const [openPaths, setOpenPaths] = useState(() => topLevelDirPaths(folderTree));
 
   // Reset to top-level-open when navigating to a different repo.
-  useEffect(() => {
+  // (Adjust-state-during-render pattern — avoids setState inside useEffect.)
+  const [prevTree, setPrevTree] = useState(folderTree);
+  if (folderTree !== prevTree) {
+    setPrevTree(folderTree);
     setOpenPaths(topLevelDirPaths(folderTree));
-  }, [folderTree]);
+  }
 
   function toggle(path: string) {
     setOpenPaths((prev) => {

@@ -5,6 +5,15 @@
   overflow: hidden;
 }
 
+.loadingState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
 
 /* ── Warning banner ─────────────────── */
 .warningBanner {
@@ -61,7 +70,7 @@
   transition: color 0.15s, border-color 0.15s;
   flex-shrink: 0;
 }
-.iconBtn:hover { color: var(--text); border-color: #9ca3af; }
+.iconBtn:hover { color: var(--text); border-color: var(--focus-ring); }
 
 .repoSlug {
   font-size: 14px;
