@@ -285,8 +285,23 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
     clientClosed = true;
   });
 
+  let queryVector: number[];
   try {
-    const queryVector = await embedQuery(query);
+    queryVector = await embedQuery(query);
+  } catch (err) {
+    console.error("Query embed failed:", err);
+    if (!clientClosed) {
+      const isQuota = err instanceof Error && err.message.toLowerCase().includes("cloudflare");
+      const msg = isQuota
+        ? "Chat is temporarily unavailable — embedding service is over its daily limit. Please try again later."
+        : "Failed to process your question. Please try again.";
+      res.write(`event: error\ndata: ${msg}\n\n`);
+      res.end();
+    }
+    return;
+  }
+
+  try {
     const results = search(repoId, queryVector);
 
     // Score visibility for debugging weak retrieval. Top-3 scores tell you at
