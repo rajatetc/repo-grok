@@ -10,9 +10,9 @@ interface Props {
 }
 
 const SUGGESTIONS = [
-  "How is the code structured?",
+  "What are the main exports and how do they connect?",
   "Walk me through the core flow",
-  "How are errors handled?",
+  "What patterns and abstractions does this use?",
 ];
 
 // Top-K shown to user. Fewer chips = less noise. The model gets all 8 from
