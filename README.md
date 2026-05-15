@@ -2,6 +2,22 @@
 
 AI-powered codebase explainer. Paste a GitHub URL and get an interactive overview, tech stack breakdown, repo health metrics, and a chat interface to ask questions about any JS/TS codebase.
 
+## Contents
+
+- [Live](#live)
+- [Architecture](#architecture)
+- [How it works](#how-it-works)
+- [Prerequisites](#prerequisites)
+- [Setup](#setup)
+- [Run](#run)
+- [Features](#features)
+- [Example repos](#example-repos)
+- [API](#api)
+- [Project docs](#project-docs)
+- [Deployment](#deployment)
+- [Tech stack](#tech-stack)
+- [License](#license)
+
 ## Live
 
 - **App:** https://repo-grok.vercel.app
