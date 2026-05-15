@@ -38,11 +38,10 @@ for multi-turn conversations.
 ---
 
 ## Tests
-Unit tests exist for `parseGitHubUrl`, `detectTechStack`, and `chunkFile` (34 tests total via Vitest).
+Unit + integration tests via Vitest cover `parseGitHubUrl`, `detectTechStack`, `chunkFile`, `vectorStore`, `lexicalSearch`, and an end-to-end pipeline test against a fixture repo in `server/fixtures/sample-repo/` that exercises chunk → store → vector-search → lexical-fallback with synthetic embeddings.
 
 **Still missing:**
-- **Integration test:** a small fixture repo (10–20 JS files committed to `server/fixtures/`) that runs the full ingest → embed → search pipeline and asserts top result is relevant
-- **LLM tests:** hard to unit test; would require mocking the Gemini SDK stream
+- **LLM tests:** hard to unit test; would require mocking the Gemini SDK stream.
 
 ---
 

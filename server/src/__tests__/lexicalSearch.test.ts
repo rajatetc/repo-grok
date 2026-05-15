@@ -35,8 +35,8 @@ beforeAll(() => {
 });
 
 describe("tokenizeQuery", () => {
-  it("lowercases and drops short tokens", () => {
-    expect(tokenizeQuery("How does createStore work?")).toEqual(["createstore", "work"]);
+  it("lowercases, splits camelCase, and drops short tokens", () => {
+    expect(tokenizeQuery("How does createStore work?")).toEqual(["create", "store", "work"]);
   });
 
   it("drops common stopwords", () => {

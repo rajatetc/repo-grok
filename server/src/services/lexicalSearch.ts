@@ -30,6 +30,10 @@ const WEIGHT_CONTENT = 1;
 
 function tokenize(text: string): string[] {
   return text
+    // Split camelCase / PascalCase so "isAuthenticated" matches a query like
+    // "authentication". Most code uses these naming conventions; without
+    // splitting, natural-language queries miss symbol-named chunks.
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((t) => t.length >= MIN_TOKEN_LEN);
