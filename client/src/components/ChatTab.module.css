@@ -134,12 +134,21 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin: 12px 16px 0;
-  padding: 12px 14px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
   background: var(--badge-build-bg);
   border: 1px solid var(--badge-build-bd);
   border-radius: var(--radius-sm);
   color: var(--badge-build-fg);
+}
+
+@media (max-width: 640px) {
+  .degradedBanner {
+    margin-bottom: 12px;
+    padding: 8px 10px;
+  }
+  .degradedBannerTitle { font-size: 12px; }
+  .degradedBannerBody { font-size: 11px; }
 }
 
 .degradedBannerTitle {
