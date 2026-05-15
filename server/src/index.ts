@@ -39,6 +39,7 @@ import { detectTechStack } from "./utils/techDetector.js";
 import { embedChunks, embedQuery } from "./services/embeddings.js";
 import { LRUCache } from "lru-cache";
 import { storeChunks, search, hasRepo } from "./services/vectorStore.js";
+import { lexicalSearch } from "./services/lexicalSearch.js";
 import { streamAnswer, type HistoryMessage } from "./services/llm.js";
 import { loadSeeds } from "./services/seeds.js";
 import { normalizeUrl } from "./utils/normalizeUrl.js";
@@ -285,24 +286,34 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
     clientClosed = true;
   });
 
-  let queryVector: number[];
+  let queryVector: number[] | null = null;
+  let usedLexicalFallback = false;
   try {
     queryVector = await embedQuery(query);
   } catch (err) {
-    console.error("Query embed failed:", err);
-    if (!clientClosed) {
-      const isQuota = err instanceof Error && err.message.toLowerCase().includes("cloudflare");
-      const msg = isQuota
-        ? "Chat is temporarily unavailable — embedding service is over its daily limit. Please try again later."
-        : "Failed to process your question. Please try again.";
-      res.write(`event: error\ndata: ${msg}\n\n`);
-      res.end();
+    const isQuota = err instanceof Error && err.message.toLowerCase().includes("cloudflare");
+    if (!isQuota) {
+      console.error("Query embed failed:", err);
+      if (!clientClosed) {
+        res.write(`event: error\ndata: Failed to process your question. Please try again.\n\n`);
+        res.end();
+      }
+      return;
     }
-    return;
+    // Cloudflare daily neurons exhausted. Fall back to lexical search so the
+    // chat path stays alive — see NOTES.md → Lexical fallback.
+    console.log("Query embed quota'd — falling back to lexical search");
+    usedLexicalFallback = true;
   }
 
   try {
-    const results = search(repoId, queryVector);
+    const results = queryVector
+      ? search(repoId, queryVector)
+      : lexicalSearch(repoId, query);
+
+    if (usedLexicalFallback) {
+      res.write(`event: degraded\ndata: ${JSON.stringify({ reason: "embed_quota" })}\n\n`);
+    }
 
     // Score visibility for debugging weak retrieval. Top-3 scores tell you at
     // a glance whether the query matched anything in the repo at all — useful
