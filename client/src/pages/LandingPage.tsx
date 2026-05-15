@@ -138,7 +138,10 @@ export default function LandingPage() {
         <div className={styles.pipeline}>
           {STEPS.map((step, i) => (
             <div key={step.id} className={styles.pipelineItem}>
-              <div className={`${styles.step} ${stepClassName(step.id, stage, styles)}`}>
+              <button
+                type="button"
+                className={`${styles.step} ${stepClassName(step.id, stage, styles)}`}
+              >
                 <span className={styles.stepIcon}>{step.icon}</span>
                 <span className={styles.stepText}>
                   <span className={styles.stepLabel}>{step.label}</span>
@@ -148,7 +151,7 @@ export default function LandingPage() {
                   <span className={styles.tooltipTitle}>{step.tooltip.title}</span>
                   {step.tooltip.body}
                 </span>
-              </div>
+              </button>
               {i < STEPS.length - 1 && <span className={styles.stepArrow}>→</span>}
             </div>
           ))}

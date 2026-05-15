@@ -190,7 +190,12 @@
   color: var(--text-muted);
   transition: background 0.3s, color 0.3s;
   cursor: default;
+  background: none;
+  border: none;
+  font-family: inherit;
 }
+.step:focus { outline: none; }
+.step:focus-visible { outline: 1px solid var(--text-muted); outline-offset: 2px; }
 
 /* idle = always visible, blue icons */
 .stepIdle   { color: var(--text-muted); }
@@ -281,7 +286,8 @@
   white-space: normal;
 }
 
-.step:hover .tooltip { opacity: 1; }
+.step:hover .tooltip,
+.step:focus-visible .tooltip { opacity: 1; }
 
 .tooltipTitle {
   display: block;
@@ -352,12 +358,15 @@
   .button { width: 100%; padding: 14px 16px; }
 
   /* Pipeline: stay horizontal but drop the tech subtitles so the four
-     steps actually fit on a phone viewport. Tooltips are hover-only so
-     also hidden — the labels alone are enough at this size. */
-  .pipeline { gap: 4px; }
+     steps actually fit on a phone viewport. Tooltips reveal on tap
+     (focus) since hover doesn't fire on touch. Anchor tooltip to the
+     pipeline row (not the step) so edge steps don't push it off-screen. */
+  .pipeline { position: relative; gap: 4px; }
   .stepTech { display: none; }
   .stepArrow { padding: 0 1px; }
-  .tooltip { display: none; }
+  .step { position: static; }
+  .tooltip { width: min(280px, calc(100vw - 32px)); }
+  .step:focus .tooltip { opacity: 1; }
 }
 
 
