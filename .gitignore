@@ -2,6 +2,9 @@ node_modules/
 dist/
 .env
 *.local
+.DS_Store
+.vercel
+.render
 
 # Personal scratchpad — keep locally, don't commit
 SCRATCH.md
