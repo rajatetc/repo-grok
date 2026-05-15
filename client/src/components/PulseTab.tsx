@@ -103,7 +103,7 @@ export default function PulseTab({ owner, repo }: Props) {
         <ul className={styles.contributors}>
           {contributors.map((c) => (
             <li key={c.login} className={styles.contributor}>
-              <img src={c.avatar_url} alt={c.login} className={styles.avatar} />
+              <img src={c.avatar_url} alt={c.login} className={styles.avatar} loading="lazy" width={24} height={24} />
               <a href={c.html_url} target="_blank" rel="noreferrer" className={styles.contributorName}>
                 {c.login}
               </a>
