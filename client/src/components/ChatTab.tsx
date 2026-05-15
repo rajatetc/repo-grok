@@ -3,21 +3,12 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useRepoStore } from "../store/useRepoStore";
 import { streamQuery } from "../api";
+import { CHAT_SUGGESTIONS, MAX_VISIBLE_SOURCES } from "../constants";
 import styles from "./ChatTab.module.css";
 
 interface Props {
   repoId: string;
 }
-
-const SUGGESTIONS = [
-  "What are the main exports and how do they connect?",
-  "Walk me through the core flow",
-  "What patterns and abstractions does this use?",
-];
-
-// Top-K shown to user. Fewer chips = less noise. The model gets all 8 from
-// the server; we just don't surface them all in the UI.
-const MAX_VISIBLE_SOURCES = 3;
 
 export default function ChatTab({ repoId }: Props) {
   const { messages, addMessage, appendToLastMessage, setSourcesOnLastMessage, metadata } = useRepoStore();
@@ -98,12 +89,12 @@ export default function ChatTab({ repoId }: Props) {
 
   return (
     <div className={styles.container}>
-      <div className={styles.messages}>
+      <div className={styles.messages} aria-live="polite">
         {messages.length === 0 && (
           <div className={styles.empty}>
-            <p>Ask anything about this codebase.</p>
+            <p>Example queries</p>
             <div className={styles.suggestionChips}>
-              {SUGGESTIONS.map((s) => (
+              {CHAT_SUGGESTIONS.map((s) => (
                 <button
                   key={s}
                   className={styles.suggestionChip}
@@ -160,6 +151,7 @@ export default function ChatTab({ repoId }: Props) {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask anything about this repo…"
           disabled={streaming}
+          aria-label="Ask a question about this codebase"
         />
         {streaming ? (
           <button

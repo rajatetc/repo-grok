@@ -3,6 +3,8 @@ import type { RepoMetadata, ChatMessage, Source } from "../types";
 
 type Status = "idle" | "ingesting" | "ready" | "error";
 
+const MAX_MESSAGES = 50;
+
 interface RepoStore {
   repoId: string | null;
   metadata: RepoMetadata | null;
@@ -20,7 +22,6 @@ interface RepoStore {
   addMessage: (message: ChatMessage) => void;
   appendToLastMessage: (text: string) => void;
   setSourcesOnLastMessage: (sources: Source[]) => void;
-  setDegradedOnLastMessage: () => void;
 }
 
 export const useRepoStore = create<RepoStore>((set) => ({
@@ -44,7 +45,10 @@ export const useRepoStore = create<RepoStore>((set) => ({
   setChunkWarning: (msg) => set({ chunkWarning: msg }),
   cancelIngest: () => set({ status: "idle", error: null, chunkWarning: null }),
 
-  addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
+  addMessage: (message) => set((state) => {
+    const msgs = [...state.messages, message];
+    return { messages: msgs.length > MAX_MESSAGES ? msgs.slice(msgs.length - MAX_MESSAGES) : msgs };
+  }),
   appendToLastMessage: (text) =>
     set((state) => {
       const messages = [...state.messages];
@@ -61,16 +65,6 @@ export const useRepoStore = create<RepoStore>((set) => ({
       const last = messages[messages.length - 1];
       if (last?.role === "assistant") {
         messages[messages.length - 1] = { ...last, sources };
-      }
-      return { messages };
-    }),
-
-  setDegradedOnLastMessage: () =>
-    set((state) => {
-      const messages = [...state.messages];
-      const last = messages[messages.length - 1];
-      if (last?.role === "assistant") {
-        messages[messages.length - 1] = { ...last, degraded: true };
       }
       return { messages };
     }),

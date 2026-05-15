@@ -5,36 +5,9 @@ import { useRecentRepos } from "../store/useRecentRepos";
 import { ingestRepoStream } from "../api";
 import { useIngestionProgress, type IngestionStage } from "../hooks/useIngestionProgress";
 import ThemeToggle from "../components/ThemeToggle";
-import { EXAMPLES } from "../constants";
+import { EXAMPLES, INGESTION_STEPS, STAGE_ORDER } from "../constants";
 import Footer from "../components/Footer";
 import styles from "./LandingPage.module.css";
-
-const STEPS: {
-  id: IngestionStage;
-  icon: string;
-  label: string;
-  tech: string;
-  tooltip: { title: string; body: string };
-}[] = [
-  {
-    id: "fetch", icon: "↓", label: "Fetch", tech: "Zip",
-    tooltip: { title: "Fetch", body: "Downloads the repo as a single zip from GitHub. One HTTP call, all files at once." },
-  },
-  {
-    id: "chunk", icon: "⚙", label: "Parse", tech: "Babel AST",
-    tooltip: { title: "AST", body: "Babel turns your code into a syntax tree. We split by real boundaries — functions, components, hooks, classes — not arbitrary line counts." },
-  },
-  {
-    id: "embed", icon: "✦", label: "Embed", tech: "BGE-small 384d",
-    tooltip: { title: "Embeddings", body: "Each chunk becomes 384 numbers that capture its meaning. Similar code = similar vectors." },
-  },
-  {
-    id: "done", icon: "◎", label: "Chat", tech: "RAG · Gemini",
-    tooltip: { title: "RAG", body: "Your question is embedded the same way. The top matching chunks go to Gemini — not the whole codebase. That's retrieval-augmented generation." },
-  },
-];
-
-const STAGE_ORDER: IngestionStage[] = ["idle", "fetch", "chunk", "embed", "done"];
 
 function stepClassName(stepId: IngestionStage, stage: IngestionStage, styles: Record<string, string>): string {
   if (stage === "idle") return styles.stepIdle;
@@ -117,6 +90,7 @@ export default function LandingPage() {
             onChange={(e) => setUrl(e.target.value)}
             disabled={isLoading}
             spellCheck={false}
+            aria-label="GitHub repository URL"
           />
           <button
             className={`${styles.button} ${isLoading ? styles.buttonMuted : ""}`}
@@ -136,7 +110,7 @@ export default function LandingPage() {
 
 
         <div className={styles.pipeline}>
-          {STEPS.map((step, i) => (
+          {INGESTION_STEPS.map((step, i) => (
             <div key={step.id} className={styles.pipelineItem}>
               <button
                 type="button"
@@ -152,7 +126,7 @@ export default function LandingPage() {
                   {step.tooltip.body}
                 </span>
               </button>
-              {i < STEPS.length - 1 && <span className={styles.stepArrow}>→</span>}
+              {i < INGESTION_STEPS.length - 1 && <span className={styles.stepArrow}>→</span>}
             </div>
           ))}
         </div>

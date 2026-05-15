@@ -2,6 +2,11 @@ import { usePulse } from "../hooks/usePulse";
 import { timeAgo, fmtNum } from "../utils/format";
 import styles from "./PulseTab.module.css";
 
+const HEX6 = /^[0-9a-fA-F]{6}$/;
+function safeColor(raw: string): string {
+  return HEX6.test(raw) ? raw : "9ca3af";
+}
+
 interface Props {
   owner: string;
   repo: string;
@@ -54,15 +59,18 @@ export default function PulseTab({ owner, repo }: Props) {
                   {issue.title}
                 </a>
                 <div className={styles.itemMeta}>
-                  {issue.labels.slice(0, 2).map((l) => (
-                    <span
-                      key={l.name}
-                      className={styles.label}
-                      style={{ background: `#${l.color}22`, color: `#${l.color}`, borderColor: `#${l.color}55` }}
-                    >
-                      {l.name}
-                    </span>
-                  ))}
+                  {issue.labels.slice(0, 2).map((l) => {
+                    const c = safeColor(l.color);
+                    return (
+                      <span
+                        key={l.name}
+                        className={styles.label}
+                        style={{ background: `#${c}22`, color: `#${c}`, borderColor: `#${c}55` }}
+                      >
+                        {l.name}
+                      </span>
+                    );
+                  })}
                   <span className={styles.time}>{timeAgo(issue.created_at)}</span>
                 </div>
               </li>

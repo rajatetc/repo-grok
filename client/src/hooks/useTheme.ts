@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 type Theme = "light" | "dark";
 
@@ -23,14 +23,14 @@ export function useTheme() {
     return t;
   });
 
-  function toggle() {
+  const toggle = useCallback(() => {
     setTheme((prev) => {
       const next: Theme = prev === "dark" ? "light" : "dark";
       localStorage.setItem("theme", next);
       applyTheme(next);
       return next;
     });
-  }
+  }, []);
 
   return { theme, toggle };
 }
