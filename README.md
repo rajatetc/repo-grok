@@ -7,6 +7,26 @@ AI-powered codebase explainer. Paste a GitHub URL and get an interactive overvie
 - **App:** https://repo-grok.vercel.app
 - **API:** https://repo-grok.onrender.com (`/health` for status)
 
+## Architecture
+
+```
+Ingest (once per repo)
+─────────────────────────────
+GitHub zip
+   → Babel AST → semantic chunks
+   → Cloudflare embed (bge-small-en-v1.5, 384-dim)
+   → in-memory vector store
+
+Query (per question)
+─────────────────────────────
+question
+   → Cloudflare embed
+   → cosine similarity over stored chunks
+   → top 8 chunks  +  question
+   → Gemini Flash
+   → SSE stream to UI
+```
+
 ## How it works
 
 1. Downloads the repo as a zip via GitHub API (one HTTP call)
