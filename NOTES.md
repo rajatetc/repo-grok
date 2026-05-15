@@ -17,6 +17,7 @@
 - [Keepalive ping](#cron-joborg-keepalive-instead-of-paying-to-stay-warm)
 - [Chunking strategy](#chunking-strategy-top-level-ast-nodes-only)
 - [Lexical fallback when embed quota is exhausted](#lexical-fallback-when-embed-quota-is-exhausted)
+- [Pre-baked canned answers](#pre-baked-canned-answers)
 - [Frontend UX decisions](#frontend-ux-decisions)
 
 ---
@@ -125,12 +126,14 @@ file decoded to UTF-8. Total uncompressed bytes are capped at 150 MB to prevent 
 `GEMINI_API_KEY` lives in the server's environment — clients never see it. Used only for LLM
 calls (question answering), not for indexing.
 
-A single server key is shared across all users. Gemini 2.5 Flash's free tier (250 RPD) is
-comfortable headroom for a personal-project traffic volume, and skipping a per-user "bring
-your own key" flow removes a modal, a Zustand field, a rate-limit nudge banner, and an
-`x-gemini-key` request header from the surface area. If the shared quota ever becomes a real
-bottleneck (visible in server logs as 429s), reintroduce a user-supplied key path then —
-not before.
+A single server key is shared across all users. Gemini's free-tier rate limits are not
+published in the public docs (Google routes you to the AI Studio dashboard for actual
+numbers); per-project per-model daily and per-minute caps both apply. Skipping a per-user
+"bring your own key" flow removes a modal, a Zustand field, a rate-limit nudge banner, and an
+`x-gemini-key` request header from the surface area. If the shared quota becomes a real
+bottleneck (visible in server logs as 429s on `generate_content_free_tier_requests`),
+reintroduce a user-supplied key path then — not before. The pre-baked canned answers
+(see below) also reduce real Gemini traffic for the demo's "happy path" chip clicks.
 
 ---
 
@@ -236,6 +239,24 @@ When `embedQuery` fails with a Cloudflare 429 (daily neuron cap), the query hand
 **When the fallback fires:** *only* on Cloudflare quota / rate-limit errors. Other embed errors (network, auth, malformed response) still fail the chat path with a generic message — those signal a real problem, not a recoverable cap.
 
 **See also:** [Embedding model evolution](#embedding-model-evolution-gemini--local-xenova--cloudflare-workers-ai) for why Cloudflare Workers AI is the embedding provider.
+
+---
+
+## Pre-baked canned answers
+
+The three suggestion chips on the empty-chat state ("How is the code structured?", "Walk me through the core flow", "How are errors handled?") have full Gemini answers baked into each seed JSON during prebake. When a user clicks a chip on a pre-baked seed (redux / express / axios / …), the server short-circuits before the embed and Gemini steps and streams the cached answer directly — instant, deterministic, $0.
+
+**Why:** the demo's happy path is "open seed → click chip → see real answer." Burning a Gemini call (and risking a quota failure) on a question we already know the right answer to is wasteful for free traffic and fragile under quota pressure. Cached answers make this path zero-cost and quota-proof — survives both Cloudflare embed cap *and* Gemini RPD/RPM throttling.
+
+**Matching:** case-insensitive, punctuation-stripped, whitespace-collapsed exact match on the question text. Chip clicks always match; free-typed identical questions also match. Anything else falls through to the live embed → search → Gemini path.
+
+**Streaming feel:** the cached answer is split into ~80-char word-boundary chunks emitted back-to-back. Renders almost instantly but still uses the existing client streaming code path, so the UI behaves identically.
+
+**Trade-off:** cached answers go stale if the underlying code shifts. Acceptable because (a) seed repos are mature/slow-moving (redux/express/axios haven't changed shape in years), and (b) source-citation chips link to GitHub master, so users always see the freshest code from there.
+
+**Refresh:** `npm run prebake -- redux express axios` re-runs the full pipeline including answer baking. Re-bake when seeds get stale or when canned chip questions change. Needs both Cloudflare *and* Gemini quotas available.
+
+**See also:** [Lexical fallback](#lexical-fallback-when-embed-quota-is-exhausted) covers the *uncached* question path when Cloudflare 429s.
 
 ---
 

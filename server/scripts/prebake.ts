@@ -18,8 +18,20 @@ import { fileURLToPath } from "node:url";
 import { fetchRepo } from "../src/services/github.js";
 import { chunkFiles } from "../src/services/chunker.js";
 import { detectTechStack } from "../src/utils/techDetector.js";
-import { embedChunks } from "../src/services/embeddings.js";
-import type { RepoMetadata } from "../src/types/index.js";
+import { embedChunks, embedQuery } from "../src/services/embeddings.js";
+import { storeChunks, search } from "../src/services/vectorStore.js";
+import { streamAnswer } from "../src/services/llm.js";
+import type { RepoMetadata, Source, CachedAnswer } from "../src/types/index.js";
+
+// Mirror of client/src/components/ChatTab.tsx `SUGGESTIONS`. Keep in sync —
+// these are the canned questions surfaced as chips on the empty chat state.
+// Baking answers for them lets the demo serve instant, deterministic responses
+// without hitting Gemini at runtime (and survives Gemini quota outages).
+const SUGGESTIONS = [
+  "How is the code structured?",
+  "Walk me through the core flow",
+  "How are errors handled?",
+];
 
 const SEEDS_DIR = join(dirname(fileURLToPath(import.meta.url)), "../seeds");
 
@@ -102,15 +114,50 @@ async function prebakeOne(owner: string, repo: string): Promise<void> {
     chunkBreakdown,
   };
 
+  // Bake answers for the canned chip questions. Stored alongside the chunks
+  // so the runtime serves them without an embed or Gemini call.
+  storeChunks(repoId, embeddedChunks);
+  const cachedAnswers: CachedAnswer[] = [];
+  for (const question of SUGGESTIONS) {
+    process.stdout.write(`  Q: ${question} ... `);
+    const qVec = await embedQuery(question);
+    const results = search(repoId, qVec);
+
+    const seenFiles = new Set<string>();
+    const sources: Source[] = [];
+    for (const r of results) {
+      if (seenFiles.has(r.chunk.filePath)) continue;
+      seenFiles.add(r.chunk.filePath);
+      sources.push({
+        filePath: r.chunk.filePath,
+        startLine: r.chunk.startLine,
+        endLine: r.chunk.endLine,
+        type: r.chunk.type,
+        name: r.chunk.name,
+      });
+    }
+
+    let answer = "";
+    for await (const piece of streamAnswer(question, results, metadata, [])) {
+      answer += piece;
+    }
+    cachedAnswers.push({ question, answer, sources });
+    console.log(`${answer.length} chars`);
+  }
+
   const outPath = join(SEEDS_DIR, `${owner}-${repo}.json`);
-  await writeFile(outPath, JSON.stringify({ repoId, url, metadata, chunks: embeddedChunks }), "utf-8");
+  await writeFile(outPath, JSON.stringify({ repoId, url, metadata, chunks: embeddedChunks, cachedAnswers }), "utf-8");
   const elapsedMs = Date.now() - startedAt;
-  console.log(`  ✓ Saved seeds/${owner}-${repo}.json (${(elapsedMs / 1000).toFixed(1)}s, ${embeddedChunks.length} chunks)`);
+  console.log(`  ✓ Saved seeds/${owner}-${repo}.json (${(elapsedMs / 1000).toFixed(1)}s, ${embeddedChunks.length} chunks, ${cachedAnswers.length} cached answers)`);
 }
 
 async function main() {
   if (!process.env.CLOUDFLARE_ACCOUNT_ID || !process.env.CLOUDFLARE_AI_TOKEN) {
     console.error("CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_AI_TOKEN not set.");
+    process.exit(1);
+  }
+  if (!process.env.GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY not set (needed to bake canned-question answers).");
     process.exit(1);
   }
 

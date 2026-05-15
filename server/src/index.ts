@@ -41,7 +41,7 @@ import { LRUCache } from "lru-cache";
 import { storeChunks, search, hasRepo } from "./services/vectorStore.js";
 import { lexicalSearch } from "./services/lexicalSearch.js";
 import { streamAnswer, type HistoryMessage } from "./services/llm.js";
-import { loadSeeds } from "./services/seeds.js";
+import { loadSeeds, getCachedAnswer } from "./services/seeds.js";
 import { normalizeUrl } from "./utils/normalizeUrl.js";
 import type { RepoMetadata } from "./types/index.js";
 
@@ -285,6 +285,36 @@ app.post("/api/repos/:id/query", async (req: Request, res: Response) => {
   req.on("close", () => {
     clientClosed = true;
   });
+
+  // Pre-baked canned-answer short-circuit. The 3 chip questions ("How is the
+  // code structured?", etc.) have answers baked into each seed JSON so the
+  // demo serves instant, deterministic, $0 responses — and survives Gemini
+  // or Cloudflare quota outages. See NOTES.md → Pre-baked canned answers.
+  const cached = getCachedAnswer(repoId, query);
+  if (cached) {
+    console.log(`Cached answer hit for "${query.slice(0, 60)}${query.length > 60 ? "…" : ""}" on ${repoId}`);
+    if (cached.sources.length > 0) {
+      res.write(`event: sources\ndata: ${JSON.stringify(cached.sources)}\n\n`);
+    }
+    // Split into ~80-char word-boundary chunks so the UI still animates,
+    // just much faster than a real Gemini stream.
+    const text = cached.answer;
+    let i = 0;
+    while (i < text.length && !clientClosed) {
+      let end = Math.min(i + 80, text.length);
+      if (end < text.length) {
+        const space = text.indexOf(" ", end);
+        if (space !== -1 && space - end < 30) end = space;
+      }
+      res.write(`data: ${JSON.stringify(text.slice(i, end))}\n\n`);
+      i = end;
+    }
+    if (!clientClosed) {
+      res.write(`event: done\ndata: \n\n`);
+      res.end();
+    }
+    return;
+  }
 
   let queryVector: number[] | null = null;
   let usedLexicalFallback = false;

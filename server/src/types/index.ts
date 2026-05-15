@@ -31,6 +31,20 @@ export interface CodeChunk {
   embedding?: number[];
 }
 
+export interface Source {
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  type: string;
+  name?: string;
+}
+
+export interface CachedAnswer {
+  question: string;
+  answer: string;
+  sources: Source[];
+}
+
 export interface TechStack {
   framework?: string;
   stateManagement?: string[];
