@@ -145,7 +145,8 @@ repo-grok/
 ## React & client performance
 - Hoist module-level constants (arrays, configs) outside component bodies. Fresh allocation on every render is wasted work.
 - `useState(() => init)` for any non-trivial initial value so the computation runs once, not on every render.
-- Use `useEffect` to reset derived state when a prop's identity legitimately changes.
+- Prefer the adjust-state-during-render pattern over `useEffect` + `setState` for resetting derived state when a prop changes (avoids cascading renders).
+- Derive state from existing state/props instead of syncing with `useEffect` when possible.
 - Stable list keys (`item.id`, never the array index) for anything that can reorder or be filtered.
 - CSS Modules for component styles; avoid inline `style` props except for one-off computed positioning.
 
@@ -164,6 +165,7 @@ repo-grok/
 - One concern per PR — don't bundle unrelated changes
 - **Subject-line only for routine work.** Add a body only when a non-obvious trade-off or constraint drove the decision and isn't already captured in the diff, a code comment, or NOTES.md. Bodies should be one short paragraph, not a multi-paragraph story.
 - Confirm before pushing; never force-push main
+- **Pre-commit hook (husky):** every commit runs lint-staged (ESLint for client, tsc for server on staged files) then `vitest run --changed HEAD~1` for both client and server. Don't bypass with `--no-verify` unless you have a good reason.
 
 ## Documentation Rules
 - **Major changes go in [`NOTES.md`](./NOTES.md) in the same PR.** Commit messages capture the *what*; NOTES.md captures the *why*: what the problem was, what was tried, what trade-offs were accepted, what would have happened otherwise.
