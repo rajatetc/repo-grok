@@ -18,7 +18,7 @@ function clientError(err: unknown, fallback: string): string {
     // with "Cloudflare". Distinguish them so users aren't told Gemini is
     // the problem when the embed step is what failed.
     if (lower.includes("cloudflare")) {
-      if (looksRateLimited) return "Embedding service is rate-limited. Please try again later.";
+      if (looksRateLimited) return "Embedding service is over its daily limit. Try one of the example repos — they're pre-loaded and work without embedding.";
       if (looksUnavailable) return "Embedding service is temporarily unavailable. Please try again in a moment.";
       return "Embedding service error. Please try again.";
     }
