@@ -2,6 +2,8 @@
 
 AI-powered codebase explainer. Paste a GitHub URL and get an interactive overview, tech stack breakdown, repo health metrics, and a chat interface to ask questions about any JS/TS codebase.
 
+<img width="800" height="520" alt="demo" src="https://github.com/user-attachments/assets/2fb7fdb6-b39c-4b0a-bc28-6715528e632a" />
+
 ## Contents
 
 - [Live](#live)
