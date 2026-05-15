@@ -6,12 +6,16 @@
  * resulting JSONs, and the server loads them at startup with zero API calls.
  *
  * Usage:
- *   npm run prebake              # all repos missing a seed file
- *   npm run prebake -- redux     # force just one (overwrites)
+ *   npm run prebake                       # all repos missing a seed file
+ *   npm run prebake -- redux              # force re-bake of one (overwrites everything)
+ *   npm run prebake -- --answers          # add/refresh canned-question answers
+ *                                         #   on existing seeds (skips fetch/chunk/embed
+ *                                         #   of chunks — saves Cloudflare neurons)
+ *   npm run prebake -- --answers redux    # same, just one repo
  */
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile, access } from "node:fs/promises";
+import { mkdir, writeFile, access, readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,7 +25,7 @@ import { detectTechStack } from "../src/utils/techDetector.js";
 import { embedChunks, embedQuery } from "../src/services/embeddings.js";
 import { storeChunks, search } from "../src/services/vectorStore.js";
 import { streamAnswer } from "../src/services/llm.js";
-import type { RepoMetadata, Source, CachedAnswer } from "../src/types/index.js";
+import type { RepoMetadata, Source, CachedAnswer, CodeChunk } from "../src/types/index.js";
 
 // Mirror of client/src/components/ChatTab.tsx `SUGGESTIONS`. Keep in sync —
 // these are the canned questions surfaced as chips on the empty chat state.
@@ -116,7 +120,17 @@ async function prebakeOne(owner: string, repo: string): Promise<void> {
 
   // Bake answers for the canned chip questions. Stored alongside the chunks
   // so the runtime serves them without an embed or Gemini call.
-  storeChunks(repoId, embeddedChunks);
+  const cachedAnswers = await bakeCachedAnswers(metadata, embeddedChunks);
+
+  const outPath = join(SEEDS_DIR, `${owner}-${repo}.json`);
+  await writeFile(outPath, JSON.stringify({ repoId, url, metadata, chunks: embeddedChunks, cachedAnswers }), "utf-8");
+  const elapsedMs = Date.now() - startedAt;
+  console.log(`  ✓ Saved seeds/${owner}-${repo}.json (${(elapsedMs / 1000).toFixed(1)}s, ${embeddedChunks.length} chunks, ${cachedAnswers.length} cached answers)`);
+}
+
+async function bakeCachedAnswers(metadata: RepoMetadata, chunks: CodeChunk[]): Promise<CachedAnswer[]> {
+  const repoId = metadata.id;
+  storeChunks(repoId, chunks);
   const cachedAnswers: CachedAnswer[] = [];
   for (const question of SUGGESTIONS) {
     process.stdout.write(`  Q: ${question} ... `);
@@ -144,11 +158,29 @@ async function prebakeOne(owner: string, repo: string): Promise<void> {
     cachedAnswers.push({ question, answer, sources });
     console.log(`${answer.length} chars`);
   }
+  return cachedAnswers;
+}
 
-  const outPath = join(SEEDS_DIR, `${owner}-${repo}.json`);
-  await writeFile(outPath, JSON.stringify({ repoId, url, metadata, chunks: embeddedChunks, cachedAnswers }), "utf-8");
+async function refreshAnswersOnly(owner: string, repo: string): Promise<boolean> {
+  const seedPath = join(SEEDS_DIR, `${owner}-${repo}.json`);
+  let raw: string;
+  try {
+    raw = await readFile(seedPath, "utf-8");
+  } catch {
+    console.log(`Skipping ${owner}/${repo} — no seed file (run a full prebake first)`);
+    return false;
+  }
+  const seed = JSON.parse(raw);
+  console.log(`\n▶ ${owner}/${repo} (answers only, ${seed.chunks.length} chunks unchanged)`);
+  const startedAt = Date.now();
+
+  const cachedAnswers = await bakeCachedAnswers(seed.metadata, seed.chunks);
+  seed.cachedAnswers = cachedAnswers;
+  await writeFile(seedPath, JSON.stringify(seed), "utf-8");
+
   const elapsedMs = Date.now() - startedAt;
-  console.log(`  ✓ Saved seeds/${owner}-${repo}.json (${(elapsedMs / 1000).toFixed(1)}s, ${embeddedChunks.length} chunks, ${cachedAnswers.length} cached answers)`);
+  console.log(`  ✓ Refreshed seeds/${owner}-${repo}.json (${(elapsedMs / 1000).toFixed(1)}s, ${cachedAnswers.length} cached answers)`);
+  return true;
 }
 
 async function main() {
@@ -163,7 +195,10 @@ async function main() {
 
   await mkdir(SEEDS_DIR, { recursive: true });
 
-  const filter = process.argv.slice(2).map((s) => s.toLowerCase());
+  const args = process.argv.slice(2);
+  const answersOnly = args.includes("--answers") || args.includes("--answers-only");
+  const filter = args.filter((a) => !a.startsWith("--")).map((s) => s.toLowerCase());
+
   const targets = filter.length
     ? ALL_EXAMPLES.filter((e) => filter.includes(e.repo.toLowerCase()))
     : ALL_EXAMPLES;
@@ -173,20 +208,27 @@ async function main() {
     process.exit(1);
   }
 
-  const forceAll = filter.length > 0; // explicit names = always overwrite
   let processed = 0;
 
-  for (const { owner, repo } of targets) {
-    if (!forceAll && (await alreadySeeded(owner, repo))) {
-      console.log(`Skipping ${owner}/${repo} — seed already exists (pass repo name to force)`);
-      continue;
+  if (answersOnly) {
+    for (const { owner, repo } of targets) {
+      const ok = await refreshAnswersOnly(owner, repo);
+      if (ok) processed++;
     }
-    await prebakeOne(owner, repo);
-    processed++;
+  } else {
+    const forceAll = filter.length > 0; // explicit names = always overwrite
+    for (const { owner, repo } of targets) {
+      if (!forceAll && (await alreadySeeded(owner, repo))) {
+        console.log(`Skipping ${owner}/${repo} — seed already exists (pass repo name to force)`);
+        continue;
+      }
+      await prebakeOne(owner, repo);
+      processed++;
+    }
   }
 
   if (processed === 0) {
-    console.log("\nAll selected repos already seeded.");
+    console.log("\nNothing processed.");
   } else {
     console.log("\n✓ Done. Commit the server/seeds/ directory.");
   }
