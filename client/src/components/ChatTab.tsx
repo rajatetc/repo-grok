@@ -20,7 +20,7 @@ const SUGGESTIONS = [
 const MAX_VISIBLE_SOURCES = 3;
 
 export default function ChatTab({ repoId }: Props) {
-  const { messages, addMessage, appendToLastMessage, setSourcesOnLastMessage, setDegradedOnLastMessage, metadata } = useRepoStore();
+  const { messages, addMessage, appendToLastMessage, setSourcesOnLastMessage, metadata } = useRepoStore();
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -75,7 +75,6 @@ export default function ChatTab({ repoId }: Props) {
         setStreaming(false);
       },
       (sources) => setSourcesOnLastMessage(sources),
-      () => setDegradedOnLastMessage(),
     );
   }
 
@@ -97,30 +96,8 @@ export default function ChatTab({ repoId }: Props) {
     submitQuery(query);
   }
 
-  const isDegraded = messages.some((m) => m.degraded);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-  const showDegradedBanner = isDegraded && !bannerDismissed;
-
   return (
     <div className={styles.container}>
-      {showDegradedBanner && (
-        <div className={styles.degradedBanner} role="status">
-          <div className={styles.degradedBannerTitle}>
-            <span className={styles.degradedBannerIcon} aria-hidden="true">⚠</span>
-            Reduced quality mode
-            <button
-              type="button"
-              className={styles.degradedBannerClose}
-              onClick={() => setBannerDismissed(true)}
-              aria-label="Dismiss notice"
-              title="Dismiss"
-            >×</button>
-          </div>
-          <div className={styles.degradedBannerBody}>
-            Embedding quota for the day is exhausted. Chat uses keyword search until 00:00 UTC, so answers may be less accurate.
-          </div>
-        </div>
-      )}
       <div className={styles.messages}>
         {messages.length === 0 && (
           <div className={styles.empty}>
