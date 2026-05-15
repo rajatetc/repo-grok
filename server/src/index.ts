@@ -10,13 +10,22 @@ const isDev = process.env.NODE_ENV !== "production";
 function clientError(err: unknown, fallback: string): string {
   if (err instanceof Error) {
     const msg = err.message;
-    if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("rate limit")) {
-      return "Gemini rate limit reached. Please wait a moment and try again.";
+    const lower = msg.toLowerCase();
+    const looksRateLimited = msg.includes("429") || lower.includes("quota") || lower.includes("rate limit");
+    const looksUnavailable = msg.includes("503") || lower.includes("service unavailable") || lower.includes("overloaded");
+
+    // Embedding errors come from embeddings.ts and are always prefixed
+    // with "Cloudflare". Distinguish them so users aren't told Gemini is
+    // the problem when the embed step is what failed.
+    if (lower.includes("cloudflare")) {
+      if (looksRateLimited) return "Embedding service is rate-limited. Please try again later.";
+      if (looksUnavailable) return "Embedding service is temporarily unavailable. Please try again in a moment.";
+      return "Embedding service error. Please try again.";
     }
-    if (msg.includes("503") || msg.toLowerCase().includes("service unavailable") || msg.toLowerCase().includes("overloaded")) {
-      return "Gemini is temporarily overloaded. Please try again in a moment.";
-    }
-    if (msg.toLowerCase().includes("failed to parse stream") || msg.toLowerCase().includes("parse stream")) {
+
+    if (looksRateLimited) return "Gemini rate limit reached. Please wait a moment and try again.";
+    if (looksUnavailable) return "Gemini is temporarily overloaded. Please try again in a moment.";
+    if (lower.includes("failed to parse stream") || lower.includes("parse stream")) {
       return "Response was cut short — Gemini dropped the stream. Try asking again.";
     }
     if (isDev) return msg;
