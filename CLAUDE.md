@@ -71,7 +71,7 @@ Repo URL → GitHub zipball → Babel AST Parser (chunk by fn/class/component)
 |---------|-------|--------|
 | Download method | Single zipball | Avoids N+1 per-file API calls |
 | Allowed extensions | `.js/.jsx/.ts/.tsx/.html/.css/.vue/.svelte` + `package.json` | |
-| Ignored paths | `node_modules`, `dist`, `build`, `.next`, lock files | Path segment matching |
+| Ignored paths | `node_modules`, `dist`, `build`, `.next`, `bench`, `benchmarks`, lock files | Path segment matching |
 | Max file size | 500 KB | Skip generated/minified files |
 | Max extracted bytes | 150 MB | Zip bomb protection |
 | Download timeout | 60s | |

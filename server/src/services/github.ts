@@ -14,6 +14,7 @@ const MAX_FILE_SIZE = 500 * 1024; // 500KB
 const IGNORED_DIRS = new Set([
   "node_modules", "dist", "build", ".next", "out", "coverage",
   "__mocks__", "fixtures", "__fixtures__", "website",
+  "bench", "benchmarks",
 ]);
 
 // Exact filenames to skip

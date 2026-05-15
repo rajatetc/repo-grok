@@ -78,6 +78,8 @@ These ship pre-baked (embedded at build time) so the example chips on the landin
 | [`reduxjs/redux`](https://github.com/reduxjs/redux) | How does createStore work? How does middleware compose? |
 | [`expressjs/express`](https://github.com/expressjs/express) | How does the routing layer work? How is middleware chained? |
 | [`axios/axios`](https://github.com/axios/axios) | How are interceptors implemented? How does cancellation work? |
+| [`pmndrs/zustand`](https://github.com/pmndrs/zustand) | How does the store work? What patterns does it use? |
+| [`colinhacks/zod`](https://github.com/colinhacks/zod) | What are the main exports? How does schema composition work? |
 
 ## API
 

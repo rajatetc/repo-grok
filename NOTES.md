@@ -185,7 +185,7 @@ The container limits the **sum** of both, but V8 only controls its own pool. Wit
 
 2. **`NODE_OPTIONS=--max-old-space-size=400`** as a Render env var. Caps V8 heap at 400MB, leaving 112MB for native (model ~100MB, inference tensors, zlib). The more important effect is **GC timing** — V8 runs aggressive mark-and-sweep when the heap approaches its limit. A tight ceiling forces aggressive mode earlier, before native memory growth pushes the total past 512MB.
 
-3. **Two-tier cache layout** (split out of a single LRU). Pre-baked example seeds live in a permanent `Map` (3 entries today: redux, express, axios) — they're loaded once at boot and never evicted, so landing-page example chips are always "instant click." User-ingested repos live in a bounded LRU at `USER_MAX_REPOS = 10`, which caps memory at a predictable ceiling (~60MB at ~6MB/repo for 3000 chunks × 384-float embeddings + content strings). The previous single LRU of 50 conflated the two: a burst of user ingests would silently evict the seeds, defeating the "instant" promise and forcing a re-embed on next click. The split costs one extra map lookup per `getMetadata` / `search` / `hasRepo` call — negligible.
+3. **Two-tier cache layout** (split out of a single LRU). Pre-baked example seeds live in a permanent `Map` (5 entries: redux, express, axios, zustand, zod) — they're loaded once at boot and never evicted, so landing-page example chips are always "instant click." User-ingested repos live in a bounded LRU at `USER_MAX_REPOS = 10`, which caps memory at a predictable ceiling (~60MB at ~6MB/repo for 3000 chunks × 384-float embeddings + content strings). The previous single LRU of 50 conflated the two: a burst of user ingests would silently evict the seeds, defeating the "instant" promise and forcing a re-embed on next click. The split costs one extra map lookup per `getMetadata` / `search` / `hasRepo` call — negligible.
 
 **Result:** baseline ~220MB (3 seeds preloaded), peak ~350MB during a user ingest. Comfortable headroom on 512MB.
 
@@ -244,7 +244,7 @@ When `embedQuery` fails with a Cloudflare 429 (daily neuron cap), the query hand
 
 ## Pre-baked canned answers
 
-The three suggestion chips on the empty-chat state ("How is the code structured?", "Walk me through the core flow", "How are errors handled?") have full Gemini answers baked into each seed JSON during prebake. When a user clicks a chip on a pre-baked seed (redux / express / axios / …), the server short-circuits before the embed and Gemini steps and streams the cached answer directly — instant, deterministic, $0.
+The three suggestion chips on the empty-chat state ("What are the main exports and how do they connect?", "Walk me through the core flow", "What patterns and abstractions does this use?") have full Gemini answers baked into each seed JSON during prebake. When a user clicks a chip on a pre-baked seed (redux / express / axios / zustand / zod), the server short-circuits before the embed and Gemini steps and streams the cached answer directly — instant, deterministic, $0.
 
 **Why:** the demo's happy path is "open seed → click chip → see real answer." Burning a Gemini call (and risking a quota failure) on a question we already know the right answer to is wasteful for free traffic and fragile under quota pressure. Cached answers make this path zero-cost and quota-proof — survives both Cloudflare embed cap *and* Gemini RPD/RPM throttling.
 
@@ -252,9 +252,9 @@ The three suggestion chips on the empty-chat state ("How is the code structured?
 
 **Streaming feel:** the cached answer is split into ~80-char word-boundary chunks emitted back-to-back. Renders almost instantly but still uses the existing client streaming code path, so the UI behaves identically.
 
-**Trade-off:** cached answers go stale if the underlying code shifts. Acceptable because (a) seed repos are mature/slow-moving (redux/express/axios haven't changed shape in years), and (b) source-citation chips link to GitHub master, so users always see the freshest code from there.
+**Trade-off:** cached answers go stale if the underlying code shifts. Acceptable because (a) seed repos are mature/slow-moving (redux/express/axios/zustand/zod haven't changed shape in years), and (b) source-citation chips link to GitHub master, so users always see the freshest code from there.
 
-**Refresh:** `npm run prebake -- redux express axios` re-runs the full pipeline including answer baking. Re-bake when seeds get stale or when canned chip questions change. Needs both Cloudflare *and* Gemini quotas available.
+**Refresh:** `npm run prebake` re-runs the full pipeline for any repo missing a seed or with stale questions. Pass repo names to force re-bake: `npm run prebake -- redux zod`. Needs both Cloudflare *and* Gemini quotas available.
 
 **See also:** [Lexical fallback](#lexical-fallback-when-embed-quota-is-exhausted) covers the *uncached* question path when Cloudflare 429s.
 
