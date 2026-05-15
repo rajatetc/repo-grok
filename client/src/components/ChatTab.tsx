@@ -20,7 +20,7 @@ const SUGGESTIONS = [
 const MAX_VISIBLE_SOURCES = 3;
 
 export default function ChatTab({ repoId }: Props) {
-  const { messages, addMessage, appendToLastMessage, setSourcesOnLastMessage, metadata } = useRepoStore();
+  const { messages, addMessage, appendToLastMessage, setSourcesOnLastMessage, setDegradedOnLastMessage, metadata } = useRepoStore();
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -75,6 +75,7 @@ export default function ChatTab({ repoId }: Props) {
         setStreaming(false);
       },
       (sources) => setSourcesOnLastMessage(sources),
+      () => setDegradedOnLastMessage(),
     );
   }
 
@@ -130,6 +131,11 @@ export default function ChatTab({ repoId }: Props) {
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                 </div>
                 {streaming && i === messages.length - 1 && <span className={styles.cursor} />}
+                {msg.degraded && !(streaming && i === messages.length - 1) && (
+                  <div className={styles.degradedBadge} title="Embedding service is over its daily limit. This answer used keyword search instead of semantic search — quality may be lower.">
+                    Keyword fallback (embedding quota hit)
+                  </div>
+                )}
                 {msg.sources && msg.sources.length > 0 && !(streaming && i === messages.length - 1) && (
                   <div className={styles.sources}>
                     <span className={styles.sourcesLabel}>Related</span>

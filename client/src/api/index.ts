@@ -86,6 +86,7 @@ export function streamQuery(
   onDone: () => void,
   onError: (msg: string) => void,
   onSources?: (sources: Source[]) => void,
+  onDegraded?: () => void,
 ): () => void {
   const controller = new AbortController();
 
@@ -121,6 +122,11 @@ export function streamQuery(
           if (pendingEvent === "error") { onError(raw || "Stream error from server."); return; }
           if (pendingEvent === "sources") {
             try { onSources?.(JSON.parse(raw)); } catch { /* ignore malformed */ }
+            pendingEvent = "";
+            continue;
+          }
+          if (pendingEvent === "degraded") {
+            onDegraded?.();
             pendingEvent = "";
             continue;
           }

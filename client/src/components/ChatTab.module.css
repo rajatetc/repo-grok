@@ -129,6 +129,20 @@
   animation: blink 0.9s step-end infinite;
 }
 
+/* ── Degraded-mode badge ───────────────────── */
+.degradedBadge {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 12px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--accent-dim);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  cursor: help;
+}
+
 /* ── Source citations ──────────────────────── */
 .sources {
   display: flex;
