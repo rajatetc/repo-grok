@@ -97,8 +97,30 @@ export default function ChatTab({ repoId }: Props) {
     submitQuery(query);
   }
 
+  const isDegraded = messages.some((m) => m.degraded);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const showDegradedBanner = isDegraded && !bannerDismissed;
+
   return (
     <div className={styles.container}>
+      {showDegradedBanner && (
+        <div className={styles.degradedBanner} role="status">
+          <div className={styles.degradedBannerTitle}>
+            <span className={styles.degradedBannerIcon} aria-hidden="true">⚠</span>
+            Reduced quality mode
+            <button
+              type="button"
+              className={styles.degradedBannerClose}
+              onClick={() => setBannerDismissed(true)}
+              aria-label="Dismiss notice"
+              title="Dismiss"
+            >×</button>
+          </div>
+          <div className={styles.degradedBannerBody}>
+            Embedding quota for the day is exhausted. Chat uses keyword search until 00:00 UTC, so answers may be less accurate.
+          </div>
+        </div>
+      )}
       <div className={styles.messages}>
         {messages.length === 0 && (
           <div className={styles.empty}>
@@ -131,11 +153,6 @@ export default function ChatTab({ repoId }: Props) {
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                 </div>
                 {streaming && i === messages.length - 1 && <span className={styles.cursor} />}
-                {msg.degraded && !(streaming && i === messages.length - 1) && (
-                  <div className={styles.degradedBadge} title="Embedding service is over its daily limit. This answer used keyword search instead of semantic search — quality may be lower.">
-                    Keyword fallback (embedding quota hit)
-                  </div>
-                )}
                 {msg.sources && msg.sources.length > 0 && !(streaming && i === messages.length - 1) && (
                   <div className={styles.sources}>
                     <span className={styles.sourcesLabel}>Related</span>
