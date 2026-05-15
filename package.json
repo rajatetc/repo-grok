@@ -1,0 +1,18 @@
+{
+  "private": true,
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.0",
+    "lint-staged": "^16.1.0"
+  },
+  "lint-staged": {
+    "client/src/**/*.{ts,tsx}": [
+      "bash -c 'cd client && npx eslint --max-warnings 0'"
+    ],
+    "server/src/**/*.ts": [
+      "bash -c 'cd server && npx tsc --noEmit'"
+    ]
+  }
+}
