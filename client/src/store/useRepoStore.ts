@@ -22,6 +22,7 @@ interface RepoStore {
   addMessage: (message: ChatMessage) => void;
   appendToLastMessage: (text: string) => void;
   setSourcesOnLastMessage: (sources: Source[]) => void;
+  setDegradedOnLastMessage: () => void;
 }
 
 export const useRepoStore = create<RepoStore>((set) => ({
@@ -65,6 +66,16 @@ export const useRepoStore = create<RepoStore>((set) => ({
       const last = messages[messages.length - 1];
       if (last?.role === "assistant") {
         messages[messages.length - 1] = { ...last, sources };
+      }
+      return { messages };
+    }),
+
+  setDegradedOnLastMessage: () =>
+    set((state) => {
+      const messages = [...state.messages];
+      const last = messages[messages.length - 1];
+      if (last?.role === "assistant") {
+        messages[messages.length - 1] = { ...last, degraded: true };
       }
       return { messages };
     }),

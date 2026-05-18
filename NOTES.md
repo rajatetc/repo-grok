@@ -228,13 +228,15 @@ Fallback to line-based splitting if Babel can't parse the file.
 
 ## Lexical fallback when embed quota is exhausted
 
-When `embedQuery` fails with a Cloudflare 429 (daily neuron cap), the query handler falls back to a keyword-overlap search over the same chunks instead of failing the entire chat path. The streamed response carries an `event: degraded` SSE frame so the client can surface a "keyword fallback" badge under the answer.
+When `embedQuery` fails with a Cloudflare 429 (daily neuron cap), the query handler falls back to a keyword-overlap search over the same chunks instead of failing the entire chat path. The streamed response carries an `event: degraded` SSE frame so the client can surface a dismissible "Reduced quality mode" banner at the top of the chat.
 
 **Why:** the day-1 launch consumed 21.7K neurons against a 10K free-tier cap, and the chat path was hard-down for the rest of the day. A measurably worse answer is still better than "service unavailable" for a demo product where most visitors only try once.
 
 **Scoring:** for each query token (lowercased, stopword-filtered, ≥3 chars), count occurrences in `chunk.name` (×5), `chunk.filePath` (×3), `chunk.type` (×2), `chunk.content` (×1). Sum, sort descending, take top-K. Stopwords list covers obvious query verbs ("how", "what", "explain", "describe", etc.).
 
-**Quality trade-off:** lexical is much weaker than vector for concept-level questions ("how does authentication flow?") because the relevant chunks often don't contain the exact words. It's near-equivalent for entity-level questions ("what does createStore do?") where the answer almost certainly mentions the named symbol. The degraded badge sets user expectations.
+**Quality trade-off:** lexical is much weaker than vector for concept-level questions ("how does authentication flow?") because the relevant chunks often don't contain the exact words. It's near-equivalent for entity-level questions ("what does createStore do?") where the answer almost certainly mentions the named symbol. The top banner sets user expectations.
+
+**Surfacing — banner over badge:** an earlier iteration used an inline badge under each degraded answer. Switched to a single dismissible top banner so the warning is unmissable on the first degraded reply and doesn't repeat visually on every subsequent answer in the same session. Banner stays visible for the rest of the session unless dismissed.
 
 **When the fallback fires:** *only* on Cloudflare quota / rate-limit errors. Other embed errors (network, auth, malformed response) still fail the chat path with a generic message — those signal a real problem, not a recoverable cap.
 

@@ -129,6 +129,61 @@
   animation: blink 0.9s step-end infinite;
 }
 
+/* ── Degraded-mode banner ──────────────────── */
+.degradedBanner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--badge-build-bg);
+  border: 1px solid var(--badge-build-bd);
+  border-radius: var(--radius-sm);
+  color: var(--badge-build-fg);
+}
+
+@media (max-width: 640px) {
+  .degradedBanner {
+    margin-bottom: 12px;
+    padding: 8px 10px;
+  }
+  .degradedBannerTitle { font-size: 12px; }
+  .degradedBannerBody { font-size: 11px; }
+}
+
+.degradedBannerTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.degradedBannerIcon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.degradedBannerClose {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.6;
+  padding: 0 4px;
+  font-size: 18px;
+  line-height: 1;
+  transition: opacity 0.15s;
+}
+
+.degradedBannerClose:hover { opacity: 1; }
+
+.degradedBannerBody {
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.9;
+}
+
 /* ── Source citations ──────────────────────── */
 .sources {
   display: flex;
