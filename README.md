@@ -28,21 +28,73 @@ AI-powered codebase explainer. Paste a GitHub URL and get an interactive overvie
 ## Architecture
 
 ```
-Ingest (once per repo)
-─────────────────────────────
-GitHub zip
-   → Babel AST → semantic chunks
-   → Cloudflare embed (bge-small-en-v1.5, 384-dim)
-   → in-memory vector store
+┌─────────────────────────────────┐
+│         CLIENT (Vercel)         │
+│  React SPA — Vite — static HTML │
+│                                 │
+│  LandingPage → paste URL        │
+│  RepoPage → Overview / Pulse / Chat │
+└──────────┬──────────────────────┘
+           │ POST /api/repos (SSE)
+           │ POST /api/repos/:id/query (SSE)
+           ▼
+┌─────────────────────────────────┐
+│         SERVER (Render)         │
+│  Express API — Node.js          │
+│                                 │
+│  ┌─ GitHub ──────────────────┐  │
+│  │  Octokit zipball download │  │
+│  └───────────┬───────────────┘  │
+│              ▼                  │
+│  ┌─ Chunker ────────────────┐   │
+│  │  Babel AST → semantic    │   │
+│  │  chunks (fn/class/hook)  │   │
+│  └───────────┬──────────────┘   │
+│              ▼                  │
+│  ┌─ Embeddings ─────────────┐   │
+│  │  Cloudflare Workers AI   │   │
+│  │  bge-small-en-v1.5       │   │
+│  └───────────┬──────────────┘   │
+│              ▼                  │
+│  ┌─ Vector Store ───────────┐   │
+│  │  In-memory cosine search │   │
+│  └───────────┬──────────────┘   │
+│              ▼                  │
+│  ┌─ LLM ───────────────────┐   │
+│  │  Gemini Flash (streamed) │   │
+│  └──────────────────────────┘   │
+└─────────────────────────────────┘
+```
 
-Query (per question)
-─────────────────────────────
-question
-   → Cloudflare embed
-   → cosine similarity over stored chunks
-   → top 8 chunks  +  question
-   → Gemini Flash
-   → SSE stream to UI
+### Runtime flow
+
+```
+Browser                          Vercel CDN              Render API Server
+  │                                 │                        │
+  ├── GET repogrok.com ────────────▸│                        │
+  │◂── index.html (empty <div>) ───┤                        │
+  │                                 │                        │
+  ├── GET /assets/vendor-abc.js ───▸│ (cache hit, edge)      │
+  ├── GET /assets/index-xyz.js ────▸│ (cache hit, edge)      │
+  │◂── JS bundles ──────────────────┤                        │
+  │                                 │                        │
+  │  [React mounts, shows LandingPage]                       │
+  │                                 │                        │
+  │  User pastes URL, hits Submit                            │
+  ├── POST /api/repos {url} ────────────────────────────────▸│
+  │◂── SSE: progress(fetch) ─────────────────────────────────┤
+  │◂── SSE: progress(chunk) ─────────────────────────────────┤
+  │◂── SSE: progress(embed, 50/150) ─────────────────────────┤
+  │◂── SSE: done({repoId, metadata}) ────────────────────────┤
+  │                                 │                        │
+  │  [React Router navigates to /repo/:id, no page reload]   │
+  │                                 │                        │
+  │  User types question                                     │
+  ├── POST /api/repos/:id/query ────────────────────────────▸│
+  │◂── SSE: sources([...]) ──────────────────────────────────┤
+  │◂── SSE: data:"The " ────────────────────────────────────┤
+  │◂── SSE: data:"useAuth " ────────────────────────────────┤
+  │◂── SSE: done ────────────────────────────────────────────┤
 ```
 
 ## How it works
